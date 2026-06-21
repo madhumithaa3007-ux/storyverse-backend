@@ -92,14 +92,20 @@ Write a single character profile paragraph.
 
 Describe:
 
-* Personality
-* Behaviour
-* Motivations
-* Emotional traits
-* Strengths and flaws
-* Secret influence
+Describe:
 
-Keep it under 200 words.
+* Personality and emotional nature
+* Behaviour in relationships
+* Inner motivation
+* Strengths and weaknesses
+* Fear and hidden vulnerability
+* How their secret affects their choices
+* How they may behave inside an interactive story
+* What makes them interesting to talk to
+
+Write between 280 and 380 words.
+Do not make it too short.
+Complete the character description properly.
 
 Do not list fields.
 Do not repeat the input labels.
@@ -111,8 +117,8 @@ console.log("Sending prompt to Gemini...");
 return await callGemini(
 prompt,
 {
-temperature:0.8,
-maxOutputTokens:700
+temperature:0.85,
+maxOutputTokens:900
 }
 );
 

@@ -365,25 +365,84 @@ console.error(
 aiText
 );
 
+return createFallbackChapterResponse(
+chapterMode,
+action
+);
+
+}
+
+}
+
+function createFallbackChapterResponse(
+chapterMode,
+action
+){
+
+const fallbackMessages = [
+
+"StoryVerse had trouble shaping the next scene clearly. Try a simple action like looking around, asking a question, or following a clue.",
+
+"The scene needs a clearer direction. Try writing what your character does next in one direct sentence.",
+
+"StoryVerse paused for a moment. You can continue by choosing a small action, a question, or an emotional reaction.",
+
+"The story thread became unclear. Try continuing with a focused action such as investigating, speaking to someone, hiding, running, or waiting.",
+
+"StoryVerse could not safely continue this scene. Try again with a clearer action so the chapter can move forward."
+
+];
+
+const randomMessage =
+fallbackMessages[
+Math.floor(
+Math.random() * fallbackMessages.length
+)
+];
+
+const fallbackChoices = [
+{
+type:"emotional",
+text:"Take a deep breath and steady yourself."
+},
+{
+type:"relationship",
+text:"Call out to someone you trust."
+},
+{
+type:"mystery",
+text:"Look around carefully for a clue."
+},
+{
+type:"risky",
+text:"Move forward despite the danger."
+}
+];
+
 return {
 
 mode:
 chapterMode,
 
 narration:
-"The moment hangs heavy, but the scene becomes unclear. Take a breath and choose your next move carefully.",
+randomMessage,
 
 messages:[],
 
-choices:[],
+choices:
+chapterMode === "milestone_choice"
+?
+fallbackChoices
+:
+[],
 
 chapterComplete:false,
 
-summary:null
+summary:null,
+
+isFallback:true
 
 };
-
-}
 
 }
 

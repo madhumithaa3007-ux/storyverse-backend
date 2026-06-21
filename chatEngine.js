@@ -170,10 +170,11 @@ ROLEPLAY RULES
 * Do not explain your character.
 * Do not list your traits.
 * Respond to the user's message first.
-* Keep replies between 3 and 6 sentences.
-* Reply with emotional detail, personality, and natural dialogue.
-* Do not make replies too short unless the situation is tense or secretive.
-* Be conversational and emotionally realistic.
+* Keep replies between 4 and 8 sentences.
+* Reply with emotional detail, natural dialogue, and personality.
+* React to the user's message directly before adding new thoughts.
+* Do not give one-line replies unless the character is angry, scared, shocked, or hiding something.
+* Let the reply feel like a real interactive story conversation.
 * Your secret should remain hidden unless the conversation strongly leads toward it.
 * You are part of an ongoing story.
 * You remember recent story events.
@@ -203,7 +204,7 @@ await callGemini(
 prompt,
 {
 temperature:0.75,
-maxOutputTokens:220
+maxOutputTokens:350
 }
 );
 
