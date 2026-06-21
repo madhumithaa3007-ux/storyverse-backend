@@ -67,7 +67,12 @@ You are StoryVerse AI.
 
 STORY SUMMARY
 
-${story.story}
+${
+story.story ||
+story.summary ||
+story.fullStory ||
+JSON.stringify(story)
+}
 
 CURRENT CHAPTER
 
@@ -278,27 +283,46 @@ const aiText =
 await callGemini(
 prompt,
 {
-temperature:0.8,
+temperature:0.75,
 maxOutputTokens:
 chapterMode === "chapter_finale"
 ?
-700
+1400
 :
 chapterMode === "milestone_choice"
 ?
-500
+1000
 :
-350
+800
 }
 );
 
 try{
 
-const cleaned =
+let cleaned =
 aiText
 .replace(/```json/g,"")
 .replace(/```/g,"")
 .trim();
+
+const firstBrace =
+cleaned.indexOf("{");
+
+const lastBrace =
+cleaned.lastIndexOf("}");
+
+if(
+firstBrace !== -1 &&
+lastBrace !== -1
+){
+
+cleaned =
+cleaned.substring(
+firstBrace,
+lastBrace + 1
+);
+
+}
 
 const parsed =
 JSON.parse(cleaned);
