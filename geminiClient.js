@@ -21,7 +21,7 @@ async function callGemini(prompt, options = {}){
 
 const model =
 genAI.getGenerativeModel({
-model: options.model || "gemini-2.5-flash"
+model: options.model || "gemini-3.5-flash"
 });
 
 const result =
