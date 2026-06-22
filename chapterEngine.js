@@ -146,7 +146,7 @@ for ${playerCharacter.name}.
 Only generate:
 
 - Narration
-- Other character dialogue
+- Other 1 to 3 characters dialogue
 
 The player character may appear in narration,
 but may never speak.
@@ -287,13 +287,13 @@ temperature:0.75,
 maxOutputTokens:
 chapterMode === "chapter_finale"
 ?
-1400
+1200
 :
 chapterMode === "milestone_choice"
 ?
-1000
+900
 :
-800
+600
 }
 );
 

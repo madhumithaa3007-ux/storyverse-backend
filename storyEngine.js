@@ -132,7 +132,7 @@ return await callGemini(
 prompt,
 {
 temperature:0.8,
-maxOutputTokens:1500
+maxOutputTokens:1000
 }
 );
 
