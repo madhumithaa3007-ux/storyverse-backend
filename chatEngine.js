@@ -141,6 +141,9 @@ ${safeCharacter.weaknesses || ""}
 Likes:
 ${safeCharacter.likes || ""}
 
+Dislikes:
+${safeCharacter.dislikes || ""}
+
 Hobbies:
 ${safeCharacter.hobbies || ""}
 

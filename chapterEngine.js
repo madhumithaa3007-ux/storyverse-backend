@@ -116,6 +116,12 @@ ${playerCharacter.strengths}
 Weaknesses:
 ${playerCharacter.weaknesses}
 
+Likes:
+${playerCharacter.likes}
+
+Dislikes:
+${playerCharacter.dislikes}
+
 Fears:
 ${playerCharacter.fears}
 
@@ -168,6 +174,8 @@ Speech Style: ${character.speechStyle}
 Relationship Style: ${character.relationshipStyle}
 Strengths: ${character.strengths}
 Weaknesses: ${character.weaknesses}
+Likes: ${character.likes}
+Dislikes: ${character.dislikes}
 Fears: ${character.fears}
 Secret Type: ${character.secretType}
 Profile: ${character.profile}

@@ -30,6 +30,9 @@ characterData.weaknesses || "Overthinking";
 const likes =
 characterData.likes || "Quiet places";
 
+const dislikes =
+characterData.dislikes || "Dishonesty";
+
 const hobbies =
 characterData.hobbies || "Reading";
 
@@ -68,6 +71,9 @@ ${weaknesses}
 Likes:
 ${likes}
 
+Dislikes:
+${dislikes}
+
 Hobbies:
 ${hobbies}
 
@@ -99,6 +105,7 @@ Describe:
 * Inner motivation
 * Strengths and weaknesses
 * Fear and hidden vulnerability
+* Likes, dislikes, and emotional triggers
 * How their secret affects their choices
 * How they may behave inside an interactive story
 * What makes them interesting to talk to
