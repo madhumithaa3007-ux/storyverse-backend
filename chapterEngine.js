@@ -291,17 +291,18 @@ const aiText =
 await callGemini(
 prompt,
 {
-temperature:0.75,
+temperature:0.65,
+responseMimeType:"application/json",
 maxOutputTokens:
 chapterMode === "chapter_finale"
 ?
-1200
+1400
 :
 chapterMode === "milestone_choice"
 ?
-900
+1000
 :
-600
+750
 }
 );
 
