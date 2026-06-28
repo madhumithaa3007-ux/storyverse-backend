@@ -18,6 +18,15 @@ storyMemory
 
 } = data;
 
+const safeStory =
+story || {};
+
+const safeCharacters =
+characters || [];
+
+const safePlayer =
+playerCharacter || {};
+
 const milestones =
 chapterMilestones || [
 5,
@@ -65,22 +74,31 @@ const prompt = `
 
 You are StoryVerse AI.
 
+You are writing an interactive story game response.
+
+IMPORTANT OUTPUT RULE:
+
+Return ONLY valid JSON.
+Do not include markdown.
+Do not include explanation outside JSON.
+Do not wrap JSON in code blocks.
+
 STORY SUMMARY
 
 ${
-story.story ||
-story.summary ||
-story.fullStory ||
-JSON.stringify(story)
+safeStory.story ||
+safeStory.summary ||
+safeStory.fullStory ||
+JSON.stringify(safeStory)
 }
 
 CURRENT CHAPTER
 
-${currentChapter}
+${currentChapter || 1}
 
 CHAPTER LIMIT
 
-${chapterLimit}
+${chapterLimit || 20}
 
 CURRENT INTERACTION COUNT
 
@@ -93,92 +111,92 @@ ${chapterMode}
 PLAYER CHARACTER
 
 Name:
-${playerCharacter.name}
+${safePlayer.name || "Player"}
 
 Role:
-${playerCharacter.role}
+${safePlayer.role || "Main Character"}
 
 Occupation:
-${playerCharacter.occupation}
+${safePlayer.occupation || ""}
 
 Traits:
-${playerCharacter.traits}
+${safePlayer.traits || ""}
 
 Speech Style:
-${playerCharacter.speechStyle}
+${safePlayer.speechStyle || ""}
 
 Relationship Style:
-${playerCharacter.relationshipStyle}
+${safePlayer.relationshipStyle || ""}
 
 Strengths:
-${playerCharacter.strengths}
+${safePlayer.strengths || ""}
 
 Weaknesses:
-${playerCharacter.weaknesses}
+${safePlayer.weaknesses || ""}
 
 Likes:
-${playerCharacter.likes}
+${safePlayer.likes || ""}
 
 Dislikes:
-${playerCharacter.dislikes}
+${safePlayer.dislikes || ""}
 
 Fears:
-${playerCharacter.fears}
+${safePlayer.fears || ""}
 
 Secret Type:
-${playerCharacter.secretType}
+${safePlayer.secretType || ""}
 
 Profile:
-${playerCharacter.profile}
+${safePlayer.profile || ""}
 
 Persona Rules:
-${playerCharacter.rules || ""}
+${safePlayer.rules || ""}
 
 Persona Triggers:
-${playerCharacter.triggers || ""}
+${safePlayer.triggers || ""}
 
 IMPORTANT PLAYER RULE
 
 The player controls:
 
-${playerCharacter.name}
+${safePlayer.name || "Player"}
 
 Never generate dialogue,
 thoughts,
 actions,
 or decisions
-for ${playerCharacter.name}.
+for ${safePlayer.name || "the player character"}.
 
 Only generate:
 
-- Narration
-- Other 1 to 3 characters dialogue
+- Short narration
+- Dialogue from other characters only
 
 The player character may appear in narration,
 but may never speak.
 
-ALL STORY CHARACTERS
+ALL NON-PLAYER CHARACTERS
 
-${characters
-.filter(
-character =>
-character.name !== playerCharacter.name
+${safeCharacters
+.filter(character =>
+character &&
+character.name !== safePlayer.name
 )
 .map(character =>
 `
-Name: ${character.name}
-Role: ${character.role}
-Occupation: ${character.occupation}
-Traits: ${character.traits}
-Speech Style: ${character.speechStyle}
-Relationship Style: ${character.relationshipStyle}
-Strengths: ${character.strengths}
-Weaknesses: ${character.weaknesses}
-Likes: ${character.likes}
-Dislikes: ${character.dislikes}
-Fears: ${character.fears}
-Secret Type: ${character.secretType}
-Profile: ${character.profile}
+Name: ${character.name || ""}
+Role: ${character.role || ""}
+Occupation: ${character.occupation || ""}
+Traits: ${character.traits || ""}
+Speech Style: ${character.speechStyle || ""}
+Relationship Style: ${character.relationshipStyle || ""}
+Strengths: ${character.strengths || ""}
+Weaknesses: ${character.weaknesses || ""}
+Likes: ${character.likes || ""}
+Dislikes: ${character.dislikes || ""}
+Fears: ${character.fears || ""}
+Secret Type: ${character.secretType || ""}
+Profile: ${character.profile || ""}
 Relationship Values: ${JSON.stringify(character.relationship || {})}
 Behaviour Rules: ${character.rules || ""}
 Story Triggers: ${character.triggers || ""}
@@ -199,17 +217,13 @@ ${JSON.stringify(
 
 PLAYER ACTION
 
-${action}
+${action || ""}
 
-RULES
-
-Return ONLY valid JSON.
-
-JSON format:
+JSON FORMAT
 
 {
   "mode":"normal",
-  "narration":"Story narration here",
+  "narration":"Short story narration here",
   "messages":[
     {
       "character":"Character Name",
@@ -221,16 +235,27 @@ JSON format:
   "summary":null
 }
 
-MODE RULES
+NORMAL MODE RULES
 
 If CURRENT CHAPTER MODE is normal:
+
 - Continue the story naturally.
+- Keep narration short: 45 to 80 words only.
+- Use only 1 short narrator paragraph.
+- Focus only on the immediate result of the player's action.
+- Do not over-explain emotions or surroundings.
 - Do not provide choices.
 - choices must be [].
 - chapterComplete must be false.
+- Include 0 to 2 character dialogue messages only if needed.
+- Each dialogue must be 1 to 2 sentences only.
+
+MILESTONE CHOICE MODE RULES
 
 If CURRENT CHAPTER MODE is milestone_choice:
+
 - Continue the scene briefly.
+- Keep narration between 35 and 60 words.
 - Then present exactly 4 choices.
 - choices must contain exactly 4 objects.
 - Do not continue the story after choices.
@@ -246,21 +271,29 @@ If CURRENT CHAPTER MODE is milestone_choice:
 - risky choice must involve danger, confrontation, escape, sacrifice, or bold action.
 - chapterComplete must be false.
 
+CLIFFHANGER BUILD MODE RULES
+
 If CURRENT CHAPTER MODE is cliffhanger_build:
+
 - Increase suspense.
+- Keep narration between 60 and 100 words.
 - Build emotional tension.
 - Prepare an important reveal, danger, betrayal, confession, or mystery.
 - Do not resolve the main conflict.
 - choices must be [].
 - chapterComplete must be false.
 
+CHAPTER FINALE MODE RULES
+
 If CURRENT CHAPTER MODE is chapter_finale:
+
 - Generate a strong cliffhanger.
+- Keep narration between 100 and 160 words.
 - Leave an important question unanswered.
 - Do not provide choices.
 - End at the most dramatic moment possible.
 - The final line of narration must be:
-  To be continued in Chapter ${currentChapter + 1}...
+  To be continued in Chapter ${Number(currentChapter || 1) + 1}...
 - chapterComplete must be true.
 - summary must include:
   chapterTitle
@@ -271,20 +304,20 @@ If CURRENT CHAPTER MODE is chapter_finale:
   currentMysteries
   cliffhangerDescription
 
-GENERAL RULES
+GENERAL STORY RULES
 
-- Never generate dialogue for the player character: ${playerCharacter.name}.
+- Never generate dialogue for the player character: ${safePlayer.name || "Player"}.
 - Only non-player characters may speak.
-- Narration may describe the player character's visible actions, but never decide new actions for them.
+- Narration may describe visible reactions, but never decide new actions for the player character.
 - Maintain character personalities.
 - Respect story history and previous choices.
-- Write like a professional interactive novel.
-- Keep narration immersive and emotionally engaging.
+- Write like a premium interactive novel.
+- Keep the response compact and mobile-friendly.
+- Avoid long paragraphs.
+- Avoid repetitive narration.
 - Avoid markdown.
 - Output JSON only.
-- Keep normal interactions between 120 and 220 words.
-- For milestone_choice mode, keep narration brief and make choices concise.
-- For chapter_finale mode, allow a stronger dramatic scene and summary.
+
 `;
 
 const aiText =
@@ -296,13 +329,17 @@ responseMimeType:"application/json",
 maxOutputTokens:
 chapterMode === "chapter_finale"
 ?
-1400
+1000
 :
 chapterMode === "milestone_choice"
 ?
-1000
+700
 :
-750
+chapterMode === "cliffhanger_build"
+?
+600
+:
+450
 }
 );
 
@@ -337,6 +374,7 @@ const parsed =
 JSON.parse(cleaned);
 
 return {
+
 mode:
 parsed.mode || chapterMode,
 
@@ -344,16 +382,27 @@ narration:
 parsed.narration || "",
 
 messages:
-parsed.messages || [],
+Array.isArray(parsed.messages)
+?
+parsed.messages.slice(0,3)
+:
+[],
 
 choices:
-parsed.choices || [],
+Array.isArray(parsed.choices)
+?
+parsed.choices
+:
+[],
 
 chapterComplete:
 parsed.chapterComplete || false,
 
 summary:
-parsed.summary || null
+parsed.summary || null,
+
+isFallback:false
+
 };
 
 }
@@ -394,7 +443,7 @@ const fallbackMessages = [
 
 "The scene needs a clearer direction. Try writing what your character does next in one direct sentence.",
 
-"StoryVerse paused for a moment. You can continue by choosing a small action, a question, or an emotional reaction.",
+"StoryVerse paused for a moment. Continue with a small action, a question, or an emotional reaction.",
 
 "The story thread became unclear. Try continuing with a focused action such as investigating, speaking to someone, hiding, running, or waiting.",
 
