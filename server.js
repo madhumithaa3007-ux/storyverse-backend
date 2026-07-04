@@ -60,7 +60,7 @@ idea
         console.log("Idea:", idea);
         console.log("================================");
 console.log(req.body);
-      const story =
+const generatedStory =
 await generateStory({
 title,
 genre,
@@ -74,6 +74,11 @@ endingCount,
 idea
 });
 
+const story =
+generatedStory.storyPreview;
+
+const suggestedCharacters =
+generatedStory.suggestedCharacters || [];  
    let storyId =
 null;
 
@@ -118,6 +123,8 @@ res.json({
 success:true,
 
 story,
+
+suggestedCharacters,
 
 storyId
 

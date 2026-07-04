@@ -37,8 +37,14 @@ text:prompt
 }
 ],
 generationConfig:{
-temperature: options.temperature || 0.8,
-maxOutputTokens: options.maxOutputTokens || 700
+temperature:
+options.temperature || 0.8,
+
+maxOutputTokens:
+options.maxOutputTokens || 700,
+
+responseMimeType:
+options.responseMimeType || undefined
 }
 });
 
