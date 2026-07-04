@@ -13,6 +13,8 @@ playerCharacter,
 
 currentChapter,
 
+chatScene,
+
 storyMemory,
 
 chatHistory,
@@ -75,6 +77,25 @@ ${safeStory.genre || "Drama"}
 
 Current Chapter:
 ${currentChapter || 1}
+
+TEMPORARY CHAT SCENE
+
+${
+chatScene
+?
+chatScene
+:
+"No custom scene is set. Continue using the normal story and chat context."
+}
+
+SCENE RULES
+
+- If a temporary chat scene is set, respond according to that scene.
+- The scene affects only this character chat.
+- The scene is not permanent story canon.
+- Do not update or rewrite the original story.
+- Do not act like the chapter story has changed unless storyMemory supports it.
+- If no scene is set, continue naturally from story context and chat history.
 
 STORY MAIN CHARACTER CONTEXT
 
