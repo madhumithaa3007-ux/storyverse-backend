@@ -121,7 +121,13 @@ STORY PREVIEW RULES
 
 SUGGESTED CHARACTER RULES
 
-- Create 5 to 8 characters.
+- Create minimum 6 and maximum 8 characters.
+- Decide the character count based on story depth:
+  - Simple story idea: create exactly 6 characters.
+  - Medium-depth story idea: create exactly 7 characters.
+  - Deep story with mystery, family conflict, secrets, fantasy, thriller, crime, supernatural, or multiple romance/conflict layers: create exactly 8 characters.
+- Never create fewer than 6 characters.
+- Never create more than 8 characters.
 - Characters must fit the story idea.
 - Must include one Main Character.
 - Must include at least one Love Interest if romance type is relevant.
@@ -129,7 +135,7 @@ SUGGESTED CHARACTER RULES
 - At least one character must have a secret.
 - Do not make all characters similar.
 - Give each character a useful role in the story.
-- Keep character profiles between 80 and 130 words each.
+- Keep character profiles between 70 and 110 words each.
 
 USE ONLY THESE ROLE OPTIONS WHEN POSSIBLE
 
@@ -267,7 +273,7 @@ prompt,
 {
 temperature:0.8,
 responseMimeType:"application/json",
-maxOutputTokens:2500
+maxOutputTokens:3000
 }
 );
 
@@ -301,17 +307,20 @@ lastBrace + 1
 const parsed =
 JSON.parse(cleaned);
 
+const suggestedCharacters =
+Array.isArray(parsed.suggestedCharacters)
+?
+parsed.suggestedCharacters.slice(0,8)
+:
+[];
+
 return {
 
 storyPreview:
 parsed.storyPreview || "",
 
 suggestedCharacters:
-Array.isArray(parsed.suggestedCharacters)
-?
-parsed.suggestedCharacters
-:
-[]
+suggestedCharacters
 
 };
 
