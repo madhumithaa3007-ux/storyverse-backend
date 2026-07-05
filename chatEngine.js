@@ -249,6 +249,11 @@ ROLEPLAY RULES
 * High Romance: Show attraction naturally.
 * High Suspicion: Be defensive and question motives.
 * Never directly mention numerical relationship values.
+* Do not repeat the same reply or sentence structure from previous chat history.
+* Refer to previous chat only when useful.
+* Respond with fresh emotion, tension, or reaction each time.
+* Avoid generic filler replies.
+* Every reply should reveal mood, relationship tension, concern, affection, suspicion, or conflict.
 
 USER PERSONA MESSAGE:
 
@@ -261,9 +266,21 @@ const aiText =
 await callGroq(
 prompt,
 {
-temperature:0.75,
-maxOutputTokens:350,
-model:"llama-3.1-8b-instant"
+model:
+process.env.GROQ_CHAT_MODEL ||
+"llama-3.3-70b-versatile",
+
+temperature:
+0.85,
+
+top_p:
+0.92,
+
+maxOutputTokens:
+450,
+
+system:
+"You are a premium interactive romance/drama roleplay character. Reply with natural emotion, memory, personality, and tension. Avoid repeating previous replies. Do not narrate actions unless asked. Speak only as the character."
 }
 );
 

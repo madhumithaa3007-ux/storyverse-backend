@@ -27,7 +27,7 @@ options = {}
 const model =
 options.model ||
 process.env.GROQ_MODEL ||
-"llama-3.1-8b-instant";
+"llama-3.3-70b-versatile";
 
 const requestBody = {
 
@@ -36,13 +36,23 @@ model,
 
 messages:[
 {
+role:"system",
+content:
+options.system ||
+"You are a creative, emotionally intelligent story roleplay model. Avoid repetition. Follow the user's format strictly."
+},
+{
 role:"user",
-content:prompt
+content:
+prompt
 }
 ],
 
 temperature:
-options.temperature ?? 0.75,
+options.temperature ?? 0.8,
+
+top_p:
+options.top_p ?? 0.9,
 
 max_completion_tokens:
 options.maxOutputTokens ||

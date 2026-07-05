@@ -317,6 +317,11 @@ GENERAL STORY RULES
 - Avoid repetitive narration.
 - Avoid markdown.
 - Output JSON only.
+- Do not repeat the same narration style from the previous response.
+- Do not reuse the same emotional phrases repeatedly.
+- Avoid generic lines like "the air felt heavy" unless truly needed.
+- Each response must move the scene forward in a specific way.
+- Mention concrete actions, reactions, clues, or emotional shifts.
 
 `;
 
@@ -324,9 +329,19 @@ const aiText =
 await callGroq(
 prompt,
 {
-temperature:0.65,
-responseMimeType:"application/json",
-model:"llama-3.1-8b-instant",
+model:
+process.env.GROQ_CHAPTER_MODEL ||
+"llama-3.3-70b-versatile",
+
+temperature:
+0.75,
+
+top_p:
+0.9,
+
+responseMimeType:
+"application/json",
+
 maxOutputTokens:
 chapterMode === "chapter_finale"
 ?
@@ -340,7 +355,10 @@ chapterMode === "cliffhanger_build"
 ?
 600
 :
-450
+450,
+
+system:
+"You are StoryVerse AI, a premium interactive story narrator. Return valid JSON only. Write compact, emotional, non-repetitive narration. Do not repeat the same sentence structure. Preserve story continuity."
 }
 );
 
