@@ -1,5 +1,5 @@
-const { callGroq } =
-require("./groqClient");
+const { callGemini } =
+require("./geminiClient");
 
 async function playChapter(data){
 
@@ -326,22 +326,11 @@ GENERAL STORY RULES
 `;
 
 const aiText =
-await callGroq(
+await callGemini(
 prompt,
 {
-model:
-process.env.GROQ_CHAPTER_MODEL ||
-"llama-3.3-70b-versatile",
-
-temperature:
-0.75,
-
-top_p:
-0.9,
-
-responseMimeType:
-"application/json",
-
+temperature:0.65,
+responseMimeType:"application/json",
 maxOutputTokens:
 chapterMode === "chapter_finale"
 ?
@@ -355,10 +344,7 @@ chapterMode === "cliffhanger_build"
 ?
 600
 :
-450,
-
-system:
-"You are StoryVerse AI, a premium interactive story narrator. Return valid JSON only. Write compact, emotional, non-repetitive narration. Do not repeat the same sentence structure. Preserve story continuity."
+450
 }
 );
 

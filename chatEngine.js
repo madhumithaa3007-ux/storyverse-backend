@@ -1,5 +1,5 @@
-const { callGroq } =
-require("./groqClient");
+const { callGemini } =
+require("./geminiClient");
 
 async function chatWithCharacter(data){
 
@@ -263,24 +263,11 @@ CHARACTER REPLY:
 `;
 
 const aiText =
-await callGroq(
+await callGemini(
 prompt,
 {
-model:
-process.env.GROQ_CHAT_MODEL ||
-"llama-3.3-70b-versatile",
-
-temperature:
-0.85,
-
-top_p:
-0.92,
-
-maxOutputTokens:
-450,
-
-system:
-"You are a premium interactive romance/drama roleplay character. Reply with natural emotion, memory, personality, and tension. Avoid repeating previous replies. Do not narrate actions unless asked. Speak only as the character."
+temperature:0.8,
+maxOutputTokens:450
 }
 );
 
