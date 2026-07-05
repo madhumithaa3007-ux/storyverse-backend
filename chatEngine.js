@@ -1,5 +1,5 @@
-const { callGemini } =
-require("./geminiClient");
+const { callGroq } =
+require("./groqClient");
 
 async function chatWithCharacter(data){
 
@@ -258,11 +258,12 @@ CHARACTER REPLY:
 `;
 
 const aiText =
-await callGemini(
+await callGroq(
 prompt,
 {
 temperature:0.75,
-maxOutputTokens:350
+maxOutputTokens:350,
+model:"llama-3.1-8b-instant"
 }
 );
 

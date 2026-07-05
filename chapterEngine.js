@@ -1,5 +1,5 @@
-const { callGemini } =
-require("./geminiClient");
+const { callGroq } =
+require("./groqClient");
 
 async function playChapter(data){
 
@@ -321,11 +321,12 @@ GENERAL STORY RULES
 `;
 
 const aiText =
-await callGemini(
+await callGroq(
 prompt,
 {
 temperature:0.65,
 responseMimeType:"application/json",
+model:"llama-3.1-8b-instant",
 maxOutputTokens:
 chapterMode === "chapter_finale"
 ?
