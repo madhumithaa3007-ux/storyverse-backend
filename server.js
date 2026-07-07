@@ -101,7 +101,8 @@ storyLength,
 endingCount,
 idea,
 story,
-chapterPlan
+chapterPlan,
+suggestedCharacters
 
 });
 
