@@ -78,7 +78,10 @@ const story =
 generatedStory.storyPreview;
 
 const suggestedCharacters =
-generatedStory.suggestedCharacters || [];  
+generatedStory.suggestedCharacters || [];
+
+const chapterPlan =
+generatedStory.chapterPlan || [];
    let storyId =
 null;
 
@@ -97,7 +100,8 @@ conflictType,
 storyLength,
 endingCount,
 idea,
-story
+story,
+chapterPlan
 
 });
 
@@ -125,6 +129,8 @@ success:true,
 story,
 
 suggestedCharacters,
+
+chapterPlan,
 
 storyId
 

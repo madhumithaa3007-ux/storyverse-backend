@@ -12,6 +12,8 @@ currentChapter,
 chapterLimit,
 chapterInteractionCount,
 chapterMilestones,
+chapterPlan,
+currentChapterPlan,
 importantChoices,
 action,
 storyMemory
@@ -27,14 +29,28 @@ characters || [];
 const safePlayer =
 playerCharacter || {};
 
+const activeChapterPlan =
+currentChapterPlan ||
+(
+Array.isArray(chapterPlan)
+?
+chapterPlan.find(item=>{
+
+return Number(item.chapter) === Number(currentChapter || 1);
+
+})
+:
+null
+) ||
+{};
+
 const milestones =
 chapterMilestones || [
 5,
+15,
 25,
-45,
-65,
-85,
-95
+35,
+45
 ];
 
 let chapterMode =
@@ -52,8 +68,8 @@ chapterMode =
 }
 
 if(
-chapterInteractionCount >= 96 &&
-chapterInteractionCount <= 99
+chapterInteractionCount >= 46 &&
+chapterInteractionCount <= 49
 ){
 
 chapterMode =
@@ -62,7 +78,7 @@ chapterMode =
 }
 
 if(
-chapterInteractionCount >= 100
+chapterInteractionCount >= 50
 ){
 
 chapterMode =
@@ -100,9 +116,32 @@ CHAPTER LIMIT
 
 ${chapterLimit || 20}
 
+CURRENT CHAPTER ROUTE / PLAN
+
+Chapter Title:
+${activeChapterPlan.title || "Untitled Chapter"}
+
+Chapter Goal:
+${activeChapterPlan.goal || "Move the story forward according to the main plot."}
+
+Chapter Setting:
+${activeChapterPlan.setting || ""}
+
+Key Events That Should Happen In This Chapter:
+${JSON.stringify(activeChapterPlan.keyEvents || [])}
+
+Emotional Focus:
+${activeChapterPlan.emotionalFocus || ""}
+
+Required Reveal:
+${activeChapterPlan.requiredReveal || ""}
+
+Chapter Cliffhanger:
+${activeChapterPlan.cliffhanger || ""}
+
 CURRENT INTERACTION COUNT
 
-${chapterInteractionCount} / 100
+${chapterInteractionCount} / 50
 
 CURRENT CHAPTER MODE
 
@@ -322,6 +361,17 @@ GENERAL STORY RULES
 - Avoid generic lines like "the air felt heavy" unless truly needed.
 - Each response must move the scene forward in a specific way.
 - Mention concrete actions, reactions, clues, or emotional shifts.
+- Follow the CURRENT CHAPTER ROUTE / PLAN.
+- The story must feel pre-planned, not random.
+- Every response should move toward the chapter goal.
+- Player choices may change the emotional route, relationship route, mystery route, or risky route, but the chapter must still progress toward the planned key events.
+- Do not finish required reveals too early.
+- Do not ignore the chapter cliffhanger.
+- By interaction 45, prepare the chapter cliffhanger.
+- By interaction 50, end the chapter with the planned cliffhanger or a variation caused by the player's choices.
+- The player is a real character in the story, but never speak for them.
+- The player action can influence narration, reactions, clues, and relationship shifts.
+- Keep the base story route consistent across the chapter.
 
 `;
 

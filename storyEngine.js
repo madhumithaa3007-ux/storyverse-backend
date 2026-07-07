@@ -105,6 +105,23 @@ OUTPUT JSON FORMAT
       "rules":"Short behaviour rules",
       "profile":"Character preview paragraph"
     }
+  ],
+  "chapterPlan":[
+    {
+      "chapter":1,
+      "title":"Chapter Title",
+      "goal":"Main purpose of this chapter",
+      "setting":"Main location or atmosphere",
+      "keyEvents":[
+        "Important event 1",
+        "Important event 2",
+        "Important event 3"
+      ],
+      "emotionalFocus":"Main emotion or relationship tension",
+      "requiredReveal":"Important clue, truth, danger, or relationship shift that should happen",
+      "choiceImpact":"How player choices can change the emotional/mystery/risky route while keeping the base story",
+      "cliffhanger":"How this chapter should end"
+    }
   ]
 }
 
@@ -259,11 +276,30 @@ Secret Mission,
 Murder Witness,
 Royal Bloodline
 
+CHAPTER PLAN RULES
+
+- Create exactly ${storyLength} chapterPlan objects.
+- The chapterPlan must cover the full story from beginning to ending.
+- Each chapter must feel connected to the previous chapter.
+- Each chapter must have a clear story goal.
+- Each chapter must include 3 to 5 keyEvents.
+- Each chapter must include one requiredReveal.
+- Each chapter must include one cliffhanger.
+- The story should feel pre-planned, not random.
+- Choices may change emotional route, relationship route, mystery route, or risky route.
+- But the base story route must remain consistent.
+- Do not resolve the main conflict too early.
+- Chapter 1 should introduce the setup, characters, and first major hook.
+- Middle chapters should develop secrets, romance, mystery, betrayal, danger, or emotional conflict.
+- Final chapters should build toward endings based on choices.
+- Keep each chapterPlan object concise but specific.
+
 IMPORTANT
 
 Return JSON only.
 The JSON must be valid.
 The suggestedCharacters value must be an array.
+The chapterPlan value must be an array.
 
 `;
 
@@ -273,7 +309,7 @@ prompt,
 {
 temperature:0.8,
 responseMimeType:"application/json",
-maxOutputTokens:3000
+maxOutputTokens:6000
 }
 );
 
@@ -314,13 +350,26 @@ parsed.suggestedCharacters.slice(0,8)
 :
 [];
 
+const chapterPlan =
+Array.isArray(parsed.chapterPlan)
+?
+parsed.chapterPlan.slice(
+0,
+parseInt(storyLength) || 20
+)
+:
+[];
+
 return {
 
 storyPreview:
 parsed.storyPreview || "",
 
 suggestedCharacters:
-suggestedCharacters
+suggestedCharacters,
+
+chapterPlan:
+chapterPlan
 
 };
 
@@ -346,6 +395,9 @@ storyPreview:
 aiText,
 
 suggestedCharacters:
+[],
+
+chapterPlan:
 []
 
 };
