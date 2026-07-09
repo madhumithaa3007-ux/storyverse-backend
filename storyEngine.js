@@ -27,6 +27,9 @@ storyData.conflictType || "Hidden Secret";
 const storyLength =
 storyData.storyLength || "20";
 
+const characterCount =
+storyData.characterCount || "auto";
+
 const endingCount =
 storyData.endingCount || "3";
 
@@ -74,6 +77,9 @@ ${conflictType}
 
 Story Length:
 ${storyLength} chapters
+
+Requested Character Count:
+${characterCount}
 
 Ending Count:
 ${endingCount}
@@ -138,21 +144,43 @@ STORY PREVIEW RULES
 
 SUGGESTED CHARACTER RULES
 
-- Create minimum 6 and maximum 8 characters.
-- Decide the character count based on story depth:
-  - Simple story idea: create exactly 6 characters.
-  - Medium-depth story idea: create exactly 7 characters.
-  - Deep story with mystery, family conflict, secrets, fantasy, thriller, crime, supernatural, or multiple romance/conflict layers: create exactly 8 characters.
-- Never create fewer than 6 characters.
-- Never create more than 8 characters.
-- Characters must fit the story idea.
-- Must include one Main Character.
-- Must include at least one Love Interest if romance type is relevant.
-- Must include supporting characters useful for drama, mystery, conflict, or emotional development.
+SUGGESTED CHARACTER RULES
+
+- Maximum character limit is 12.
+- Never create more than 12 characters.
+- Never repeat the same character name in one story.
+- Every character in suggestedCharacters must have a unique name.
+- If Requested Character Count is a number from 1 to 12, create exactly that many characters.
+- If Requested Character Count is auto:
+  - Read the Story Idea carefully.
+  - If the user mentions a direct count like "10 characters", create exactly 10 characters.
+  - If the user mentions role counts like "1 love interest, 1 main character mom, 1 villain", create characters matching those requested roles first.
+  - If the story idea does not clearly mention count, create 6 to 8 characters based on story depth.
+- If the story idea asks for more than 12 characters, create only the 12 most important characters.
+- If the user asks for specific role counts, honor those role counts first.
+- Examples:
+  - "love interest 1" means create exactly one Love Interest unless the user asks for more.
+  - "main character mom 1" means create one Main Character's Mother.
+  - "two brothers" means create two brother-type characters if suitable.
+  - "6 childhood friends" means create six friend-group characters.
+- Must include one Main Character unless the user clearly says otherwise.
+- Must include at least one Love Interest if romance type is relevant or requested.
+- Include supporting characters useful for drama, mystery, conflict, or emotional development.
 - At least one character must have a secret.
 - Do not make all characters similar.
 - Give each character a useful role in the story.
 - Keep character profiles between 70 and 110 words each.
+
+NAME RULES
+
+Use varied names. Do not keep using the same names in every story.
+
+Use names from this name bank when suitable, but do not repeat names inside one story:
+
+Aarav, Aadhya, Arjun, Ananya, Riya, Rohan, Meera, Kabir, Tara, Dev, Isha, Vihaan, Nila, Kavin, Aanya, Reyansh, Diya, Varun, Priya, Nikhil, Kavya, Akash, Sanjana, Aditya, Ishaan, Neha, Maya, Aryan, Zoya, Aria, Kiara, Karthik, Shravan, Mira, Leela, Amara, Elena, Elias, Noah, Liam, Ava, Sophia, Ethan, Lucas, Olivia, Emma, Daniel, Clara, Julian, Iris, Adrian, Serena, Nathan, Aurora, Ezra, Luna, Felix, Freya, Theo, Isla, Cassian, Celeste, Rowan, Maeve, Soren, Lyra, Rafael, Valeria, Milo, Daphne, Zane, Alina, Cyrus, Elara, Ronan, Selene, Matteo, Liora, Luca, Nadia, Dante, Evie, Jasper, Mirae, Hana, Kai, Yuna, Minho, Sora, Jisoo, Ren, Aiko, Haru, Mei, Kenji, Ayla, Samir, Laila, Omar, Noor, Zain, Yasmin.
+
+- Choose names that fit the genre, culture, and setting.
+- Do not use placeholder names like Character 1 unless absolutely necessary.
 
 USE ONLY THESE ROLE OPTIONS WHEN POSSIBLE
 
@@ -344,11 +372,11 @@ const parsed =
 JSON.parse(cleaned);
 
 const suggestedCharacters =
-Array.isArray(parsed.suggestedCharacters)
-?
-parsed.suggestedCharacters.slice(0,8)
-:
-[];
+normalizeSuggestedCharacters(
+parsed.suggestedCharacters,
+characterCount,
+idea
+);
 
 const chapterPlan =
 Array.isArray(parsed.chapterPlan)
@@ -403,6 +431,123 @@ chapterPlan:
 };
 
 }
+
+}
+
+function getTargetCharacterLimit(characterCount){
+
+const raw =
+String(characterCount || "auto")
+.toLowerCase()
+.trim();
+
+if(raw === "auto"){
+
+return 12;
+
+}
+
+const parsed =
+parseInt(raw);
+
+if(isNaN(parsed)){
+
+return 12;
+
+}
+
+return Math.max(
+1,
+Math.min(
+12,
+parsed
+)
+);
+
+}
+
+function normalizeSuggestedCharacters(
+characters,
+characterCount,
+idea
+){
+
+const nameBank = [
+"Aarav","Aadhya","Arjun","Ananya","Riya","Rohan","Meera","Kabir","Tara","Dev",
+"Isha","Vihaan","Nila","Kavin","Aanya","Reyansh","Diya","Varun","Priya","Nikhil",
+"Kavya","Akash","Sanjana","Aditya","Ishaan","Neha","Maya","Aryan","Zoya","Aria",
+"Kiara","Karthik","Shravan","Mira","Leela","Amara","Elena","Elias","Noah","Liam",
+"Ava","Sophia","Ethan","Lucas","Olivia","Emma","Daniel","Clara","Julian","Iris",
+"Adrian","Serena","Nathan","Aurora","Ezra","Luna","Felix","Freya","Theo","Isla",
+"Cassian","Celeste","Rowan","Maeve","Soren","Lyra","Rafael","Valeria","Milo","Daphne",
+"Zane","Alina","Cyrus","Elara","Ronan","Selene","Matteo","Liora","Luca","Nadia",
+"Dante","Evie","Jasper","Hana","Kai","Yuna","Minho","Sora","Ren","Aiko",
+"Haru","Mei","Kenji","Ayla","Samir","Laila","Omar","Noor","Zain","Yasmin"
+];
+
+if(!Array.isArray(characters)){
+
+return [];
+
+}
+
+const limit =
+getTargetCharacterLimit(
+characterCount
+);
+
+const usedNames =
+new Set();
+
+const cleaned =
+characters
+.slice(0,limit)
+.map((character,index)=>{
+
+const safeCharacter =
+character || {};
+
+let name =
+String(
+safeCharacter.name ||
+""
+).trim();
+
+if(
+!name ||
+usedNames.has(
+name.toLowerCase()
+)
+){
+
+name =
+nameBank.find(bankName=>{
+
+return !usedNames.has(
+bankName.toLowerCase()
+);
+
+}) ||
+"Character " + (index + 1);
+
+}
+
+usedNames.add(
+name.toLowerCase()
+);
+
+return {
+
+...safeCharacter,
+
+name:
+name
+
+};
+
+});
+
+return cleaned;
 
 }
 

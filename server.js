@@ -49,6 +49,7 @@ worldSetting,
 romanceType,
 conflictType,
 storyLength,
+characterCount,
 endingCount,
 idea
 } = req.body;
@@ -70,6 +71,7 @@ worldSetting,
 romanceType,
 conflictType,
 storyLength,
+characterCount,
 endingCount,
 idea
 });
@@ -98,6 +100,7 @@ worldSetting,
 romanceType,
 conflictType,
 storyLength,
+characterCount,
 endingCount,
 idea,
 story,

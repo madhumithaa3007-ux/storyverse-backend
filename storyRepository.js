@@ -40,6 +40,9 @@ storyData.conflictType,
 storyLength:
 storyData.storyLength,
 
+characterCount: 
+storyData.characterCount,
+
 endingCount:
 storyData.endingCount,
 
