@@ -417,10 +417,45 @@ console.error(
 
 console.error(aiText);
 
+let fallbackPreview =
+aiText;
+
+try{
+
+const match =
+aiText.match(
+/"storyPreview"\s*:\s*"([\s\S]*?)"\s*,\s*"suggestedCharacters"/
+);
+
+if(
+match &&
+match[1]
+){
+
+fallbackPreview =
+match[1]
+.replace(/\\"/g,'"')
+.replace(/\\n/g,"\n");
+
+}
+
+}
+catch(parseError){
+
+console.error(
+"Fallback story preview extraction failed:"
+);
+
+console.error(
+parseError
+);
+
+}
+
 return {
 
 storyPreview:
-aiText,
+fallbackPreview,
 
 suggestedCharacters:
 [],
