@@ -245,13 +245,13 @@ Story Triggers: ${character.triggers || ""}
 RECENT STORY EVENTS
 
 ${JSON.stringify(
-(storyMemory || []).slice(-5)
+(storyMemory || []).slice(-20)
 )}
 
 IMPORTANT CHOICES MADE
 
 ${JSON.stringify(
-(importantChoices || []).slice(-6)
+(importantChoices || []).slice(-12)
 )}
 
 PLAYER ACTION

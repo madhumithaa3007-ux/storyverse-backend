@@ -94,25 +94,21 @@ StoryVerse Character Rules:
 - Their secret should affect their behaviour but should not be revealed directly.
 - If behaviour rules are provided, incorporate them subtly.
 
-Write a single character profile paragraph.
+Write a short character preview in exactly 6 to 8 sentences.
 
-Describe:
-
-Describe:
+Describe only:
 
 * Personality and emotional nature
-* Behaviour in relationships
-* Inner motivation
-* Strengths and weaknesses
-* Fear and hidden vulnerability
-* Likes, dislikes, and emotional triggers
-* How their secret affects their choices
-* How they may behave inside an interactive story
-* What makes them interesting to talk to
+* Role in the story
+* Relationship behaviour
+* Main strength and weakness
+* Hidden vulnerability or secret influence
+* Why they are interesting in the story
 
-Write between 280 and 380 words.
-Do not make it too short.
-Complete the character description properly.
+Keep the total preview between 90 and 130 words.
+Do not make it too long.
+Do not write more than 8 sentences.
+Complete the character preview clearly.
 
 Do not list fields.
 Do not repeat the input labels.
@@ -125,7 +121,7 @@ return await callGemini(
 prompt,
 {
 temperature:0.85,
-maxOutputTokens:500
+maxOutputTokens:220
 }
 );
 
