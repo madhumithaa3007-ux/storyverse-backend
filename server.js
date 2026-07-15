@@ -3,6 +3,11 @@ const cors = require("cors");
 
 const { generateStory } = require("./storyEngine");
 const { generateCharacter } = require("./characterEngine");
+const {
+generateStoryCharacters
+} = require(
+"./characterSuggestionEngine"
+);
 const { chatWithCharacter } = require("./chatEngine");
 const { playChapter } = require("./chapterEngine");
 const {
@@ -185,6 +190,59 @@ app.post("/generate-character", async (req,res)=>{
     }
 
 });
+
+app.post(
+"/generate-story-characters",
+async (req,res)=>{
+
+try{
+
+const result =
+await generateStoryCharacters(
+req.body
+);
+
+res.json({
+
+success:true,
+
+characters:
+result.characters || [],
+
+requestedTotal:
+result.requestedTotal,
+
+generatedCount:
+result.generatedCount || 0,
+
+message:
+result.message || ""
+
+});
+
+}
+catch(error){
+
+console.error(
+"Story Character Generation Error:"
+);
+
+console.error(error);
+
+res.status(500).json({
+
+success:false,
+
+error:
+error.message ||
+"Unable to generate story characters."
+
+});
+
+}
+
+}
+);
 
 app.post(
 "/play-chapter",
