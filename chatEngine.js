@@ -25,6 +25,35 @@ message
 
 } = data;
 
+const activeScene =
+String(
+chatScene || ""
+)
+.trim();
+
+const temporarySceneActive =
+Boolean(
+activeScene
+);
+
+const relevantStoryMemory =
+temporarySceneActive
+?
+[]
+:
+(
+storyMemory || []
+).slice(
+-15
+);
+
+const relevantChatHistory =
+(
+chatHistory || []
+).slice(
+-20
+);
+
 const safeStory =
 story || {};
 
@@ -77,6 +106,36 @@ ${safeStory.genre || "Drama"}
 
 Current Chapter:
 ${currentChapter || 1}
+
+CHAT MODE:
+
+${
+temporarySceneActive
+?
+"TEMPORARY SCENE CHAT"
+:
+"NORMAL STORY CHAT"
+}
+
+TEMPORARY SCENE:
+
+${
+temporarySceneActive
+?
+activeScene
+:
+"No temporary scene is active."
+}
+
+TEMPORARY SCENE RULES:
+
+- When a temporary scene is active, remain completely inside that scene.
+- Use only the temporary scene description and its separate chat history as conversation memory.
+- Do not continue the normal chapter timeline.
+- Do not use normal story events to override the temporary scene.
+- Do not claim the temporary scene happened in the original story.
+- Do not mention that this is a temporary or fictional scene.
+- When no temporary scene is active, continue naturally from the normal story and chapter context.
 
 TEMPORARY CHAT SCENE
 
@@ -148,13 +207,17 @@ ${safeUser.rules || ""}
 Persona Triggers:
 ${safeUser.triggers || ""}
 
-RECENT STORY EVENTS
+RELEVANT STORY EVENTS
 
-${JSON.stringify((storyMemory || []).slice(-15))}
+${JSON.stringify(
+relevantStoryMemory
+)}
 
-PREVIOUS CHAT HISTORY
+RELEVANT CHAT HISTORY
 
-${JSON.stringify((chatHistory || []).slice(-20))}
+${JSON.stringify(
+relevantChatHistory
+)}
 
 CURRENT RELATIONSHIP WITH USER PERSONA
 
