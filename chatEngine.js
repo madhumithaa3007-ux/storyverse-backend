@@ -1,521 +1,1212 @@
-const { callGemini } =
-require("./geminiClient");
+const { callGemini } = require("./geminiClient");
 
-function shortenChatText(
-value,
-maximumLength = 240
-){
+function toText(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
 
-const text =
-String(value || "")
-.trim();
+  if (Array.isArray(value)) {
+    return value
+      .map(toText)
+      .filter(Boolean)
+      .join(", ");
+  }
 
-if(
-text.length <=
-maximumLength
-){
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
+      return "";
+    }
+  }
 
-return text;
-
+  return String(value).trim();
 }
 
-return (
-text.substring(
-0,
-maximumLength
-) +
-"…"
-);
+function shortenText(
+  value,
+  maxLength = 260
+) {
+  const text =
+    toText(value).trim();
 
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  return (
+    text
+      .slice(0, maxLength)
+      .trimEnd() +
+    "…"
+  );
 }
 
-function buildChatMemoryWindow(
-history,
-recentLimit = 24,
-olderSamples = 8
-){
-
-const safeHistory =
-Array.isArray(history)
-?
-history
-:
-[];
-
-const recent =
-safeHistory.slice(
--recentLimit
-);
-
-const older =
-safeHistory.slice(
-0,
-Math.max(
-0,
-safeHistory.length -
-recentLimit
-)
-);
-
-const sampledOlder = [];
-
-if(older.length > 0){
-
-const sampleCount =
-Math.min(
-olderSamples,
-older.length
-);
-
-for(
-let index = 0;
-index < sampleCount;
-index++
-){
-
-const sourceIndex =
-Math.floor(
-index *
-(older.length - 1) /
-Math.max(
-1,
-sampleCount - 1
-)
-);
-
-sampledOlder.push(
-older[sourceIndex]
-);
-
+function hasUsefulData(value) {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    Object.keys(value).length > 0
+  );
 }
 
+function normalizeRelationship(
+  relationship
+) {
+  const safe =
+    relationship &&
+    typeof relationship === "object"
+      ? relationship
+      : {};
+
+  const score = (
+    value,
+    fallback
+  ) => {
+    const parsed =
+      Number(value);
+
+    return Number.isFinite(parsed)
+      ? Math.max(
+          0,
+          Math.min(100, parsed)
+        )
+      : fallback;
+  };
+
+  return {
+    trust: score(
+      safe.trust,
+      50
+    ),
+
+    friendship: score(
+      safe.friendship,
+      50
+    ),
+
+    romance: score(
+      safe.romance,
+      0
+    ),
+
+    suspicion: score(
+      safe.suspicion,
+      0
+    )
+  };
 }
 
-return [
-...sampledOlder,
-...recent
-]
-.map(entry=>{
+function compactHistoryEntry(entry) {
+  if (typeof entry === "string") {
+    return {
+      role: "context",
 
-if(
-typeof entry ===
-"string"
-){
+      text: shortenText(
+        entry,
+        240
+      )
+    };
+  }
 
-return shortenChatText(
-entry
-);
+  if (
+    !entry ||
+    typeof entry !== "object"
+  ) {
+    return null;
+  }
 
+  const type =
+    String(
+      entry.type ||
+      entry.role ||
+      ""
+    ).toLowerCase();
+
+  let role =
+    "context";
+
+  if (
+    [
+      "user",
+      "player",
+      "human"
+    ].includes(type)
+  ) {
+    role =
+      "user";
+  } else if (
+    [
+      "ai",
+      "assistant",
+      "character"
+    ].includes(type)
+  ) {
+    role =
+      "character";
+  } else if (
+    entry.speaker ||
+    entry.characterName ||
+    entry.character
+  ) {
+    role =
+      "character";
+  }
+
+  const text =
+    shortenText(
+      entry.text ||
+      entry.message ||
+      entry.narration ||
+      entry.summary ||
+      entry.choice ||
+      "",
+      260
+    );
+
+  if (!text) {
+    return null;
+  }
+
+  return {
+    role: role,
+
+    speaker:
+      shortenText(
+        entry.speaker ||
+        entry.characterName ||
+        entry.character ||
+        "",
+        60
+      ),
+
+    text: text,
+
+    scene:
+      shortenText(
+        entry.scene || "",
+        100
+      ),
+
+    time:
+      entry.time ||
+      entry.timestamp ||
+      ""
+  };
 }
 
-if(
-!entry ||
-typeof entry !==
-"object"
-){
+function buildMemoryWindow(
+  history,
+  recentLimit = 26,
+  olderSamples = 8
+) {
+  const safeHistory =
+    Array.isArray(history)
+      ? history
+      : [];
 
-return null;
+  const recent =
+    safeHistory.slice(
+      -recentLimit
+    );
 
+  const older =
+    safeHistory.slice(
+      0,
+      Math.max(
+        0,
+        safeHistory.length -
+        recentLimit
+      )
+    );
+
+  const sampledOlder =
+    [];
+
+  if (older.length > 0) {
+    const sampleCount =
+      Math.min(
+        olderSamples,
+        older.length
+      );
+
+    for (
+      let index = 0;
+      index < sampleCount;
+      index++
+    ) {
+      const sourceIndex =
+        Math.floor(
+          index *
+          (older.length - 1) /
+          Math.max(
+            1,
+            sampleCount - 1
+          )
+        );
+
+      sampledOlder.push(
+        older[sourceIndex]
+      );
+    }
+  }
+
+  return [
+    ...sampledOlder,
+    ...recent
+  ]
+    .map(
+      compactHistoryEntry
+    )
+    .filter(Boolean);
 }
 
-return {
+function historyToTranscript(
+  history,
+  characterName
+) {
+  if (
+    !Array.isArray(history) ||
+    history.length === 0
+  ) {
+    return (
+      "No previous conversation is available."
+    );
+  }
 
-type:
-entry.type ||
-"",
+  const safeName =
+    characterName ||
+    "CHARACTER";
 
-speaker:
-entry.speaker ||
-entry.character ||
-entry.characterName ||
-"",
+  return history
+    .map(entry => {
+      if (
+        entry.role === "user"
+      ) {
+        return (
+          "USER: " +
+          entry.text
+        );
+      }
 
-text:
-shortenChatText(
-entry.text ||
-entry.message ||
-entry.narration ||
-""
-),
+      if (
+        entry.role ===
+        "character"
+      ) {
+        return (
+          (
+            entry.speaker ||
+            safeName
+          ) +
+          ": " +
+          entry.text
+        );
+      }
 
-scene:
-shortenChatText(
-entry.scene ||
-"",
-120
-),
-
-time:
-entry.time ||
-entry.timestamp ||
-""
-
-};
-
-})
-.filter(Boolean);
-
+      return (
+        "CONTEXT: " +
+        entry.text
+      );
+    })
+    .join("\n");
 }
 
-function buildCharacterFallback(
-character,
-sceneActive,
-message
-){
+function memoryToBullets(memory) {
+  if (
+    !Array.isArray(memory) ||
+    memory.length === 0
+  ) {
+    return (
+      "- No relevant story events are available."
+    );
+  }
 
-const safeCharacter =
-character || {};
-
-const name =
-safeCharacter.name ||
-"The character";
-
-const style =
-String(
-safeCharacter.speechStyle ||
-""
-).toLowerCase();
-
-const latestMessage =
-shortenChatText(
-message,
-100
-);
-
-let opening =
-name +
-" pauses, studying you carefully.";
-
-if(style.includes("sarcastic")){
-
-opening =
-name +
-" gives you a look that is almost amused, but not quite.";
-
-}
-else if(style.includes("gentle")){
-
-opening =
-name +
-" softens, giving your words the attention they deserve.";
-
-}
-else if(style.includes("blunt") ||
-style.includes("direct")){
-
-opening =
-name +
-" meets your gaze without avoiding the point.";
-
-}
-else if(style.includes("playful") ||
-style.includes("teasing")){
-
-opening =
-name +
-" tilts their head, a faint challenge in their expression.";
-
+  return memory
+    .map(entry => {
+      return (
+        "- " +
+        (
+          entry.speaker
+            ? entry.speaker +
+              ": "
+            : ""
+        ) +
+        entry.text
+      );
+    })
+    .join("\n");
 }
 
-if(sceneActive){
+function inferUserIntent(message) {
+  const text =
+    String(message || "")
+      .toLowerCase()
+      .trim();
 
-return (
-opening +
-" “I’m still here, and I remember what this moment has already cost us. " +
-"Don’t hide behind easy words now—tell me what you truly mean.”"
-);
+  if (!text) {
+    return (
+      "silence or hesitation"
+    );
+  }
 
+  if (
+    /\b(sorry|apolog|forgive me|my fault)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "apology or request for forgiveness"
+    );
+  }
+
+  if (
+    /\b(i love you|love you|i miss you|missed you|care about you|need you)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "affection, longing, or confession"
+    );
+  }
+
+  if (
+    /\b(why did you|how could you|you lied|you left|betray|hate you|your fault)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "confrontation or demand for accountability"
+    );
+  }
+
+  if (
+    /\b(are you okay|what happened|tell me|can you tell|do you remember|what do you think)\b/.test(
+      text
+    ) ||
+    text.endsWith("?")
+  ) {
+    return (
+      "genuine question or request for honesty"
+    );
+  }
+
+  if (
+    /\b(help me|please stay|don't leave|dont leave|promise me|can you help)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "request for support, reassurance, or commitment"
+    );
+  }
+
+  if (
+    /\b(lol|haha|joking|teasing|funny)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "playful or teasing interaction"
+    );
+  }
+
+  if (
+    /\b(leave me|go away|stop|enough|don't touch|dont touch)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "boundary, rejection, or emotional withdrawal"
+    );
+  }
+
+  if (
+    /\b(hi|hello|hey|good morning|good night)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "greeting or gentle conversation opening"
+    );
+  }
+
+  return (
+    "ongoing personal conversation"
+  );
 }
 
-return (
-opening +
-" “I heard you" +
-(
-latestMessage
-?
-", even if I’m not ready to answer it the way you expect"
-:
-""
-) +
-". What happens between us next depends on whether we’re finally honest with each other.”"
-);
+function inferUserTone(message) {
+  const text =
+    String(message || "")
+      .toLowerCase();
 
+  if (
+    /\b(angry|furious|hate|liar|betray|how dare|shut up)\b/.test(
+      text
+    ) ||
+    /!{2,}/.test(text)
+  ) {
+    return (
+      "angry, confrontational, or overwhelmed"
+    );
+  }
+
+  if (
+    /\b(hurt|cry|broken|alone|abandon|pain|sad|upset)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "hurt, vulnerable, or emotionally exposed"
+    );
+  }
+
+  if (
+    /\b(scared|afraid|nervous|anxious|worried)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "anxious, fearful, or uncertain"
+    );
+  }
+
+  if (
+    /\b(love|miss|care|kiss|hug|beautiful|handsome)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "affectionate, intimate, or emotionally warm"
+    );
+  }
+
+  if (
+    /\b(lol|haha|tease|joke|funny)\b/.test(
+      text
+    )
+  ) {
+    return (
+      "playful or light"
+    );
+  }
+
+  if (
+    String(message || "")
+      .trim()
+      .length < 8
+  ) {
+    return (
+      "brief, guarded, or waiting for a reaction"
+    );
+  }
+
+  return (
+    "neutral or conversational"
+  );
 }
 
-async function chatWithCharacter(data){
+function getReplyPacing(message) {
+  const text =
+    String(message || "")
+      .trim();
 
-const safeData =
-data || {};
+  const words =
+    text
+      .split(/\s+/)
+      .filter(Boolean)
+      .length;
 
-const {
+  if (words <= 3) {
+    return (
+      "Reply naturally in 1 to 3 sentences, usually 15 to 55 words. Do not turn a tiny message into a speech."
+    );
+  }
 
-story,
-userPersona,
-playerCharacter,
-currentChapter,
-chatScene,
-storyMemory,
-chatHistory,
-character,
-message
+  if (
+    words >= 30 ||
+    /[?!].*[?!]/.test(text)
+  ) {
+    return (
+      "Reply in 3 to 6 sentences, usually 60 to 125 words. Address the important points without sounding like an essay."
+    );
+  }
 
-} = safeData;
+  return (
+    "Reply in 2 to 5 sentences, usually 35 to 95 words."
+  );
+}
 
-const activeScene =
-String(
-chatScene ||
-""
-)
-.trim();
+function relationshipGuidance(
+  relationship
+) {
+  const notes =
+    [];
 
-const sceneActive =
-Boolean(
-activeScene
-);
+  if (
+    relationship.trust >= 75
+  ) {
+    notes.push(
+      "The character trusts the user enough to be comparatively honest."
+    );
+  } else if (
+    relationship.trust <= 30
+  ) {
+    notes.push(
+      "The character is guarded and does not accept claims easily."
+    );
+  }
 
-const safeStory =
-story ||
-{};
+  if (
+    relationship.friendship >=
+    70
+  ) {
+    notes.push(
+      "There is established warmth, familiarity, or loyalty."
+    );
+  }
 
-const safeUser =
-userPersona ||
-safeData.persona ||
-safeData.user ||
-{};
+  if (
+    relationship.romance >= 70
+  ) {
+    notes.push(
+      "Romantic tension or emotional intimacy can be openly present."
+    );
+  } else if (
+    relationship.romance >= 35
+  ) {
+    notes.push(
+      "Romantic tension may surface subtly through hesitation, jealousy, closeness, or restraint."
+    );
+  }
 
-const safePlayerCharacter =
-playerCharacter ||
-{};
+  if (
+    relationship.suspicion >=
+    65
+  ) {
+    notes.push(
+      "The character is suspicious and may test, challenge, or question the user's motives."
+    );
+  }
 
-const safeCharacter =
-character ||
-{};
+  if (
+    notes.length === 0
+  ) {
+    notes.push(
+      "The relationship is still developing, so closeness and disclosure should feel earned."
+    );
+  }
 
-const relationship =
-safeCharacter.relationship ||
-{
-trust:50,
-friendship:50,
-romance:0,
-suspicion:0
-};
+  return notes
+    .map(note => {
+      return (
+        "- " +
+        note
+      );
+    })
+    .join("\n");
+}
 
-const relevantStoryMemory =
-sceneActive
-?
-[]
-:
-buildChatMemoryWindow(
-storyMemory,
-18,
-6
-);
+function buildFallbackReply(
+  character,
+  sceneActive,
+  message,
+  intent
+) {
+  const safeCharacter =
+    character || {};
 
-const relevantChatHistory =
-buildChatMemoryWindow(
-chatHistory,
-24,
-8
-);
+  const name =
+    safeCharacter.name ||
+    "The character";
 
-const longTermChatSummary =
-String(
-sceneActive
-?
-(
-safeData.sceneMemorySummary ||
-""
-)
-:
-(
-safeData.chatMemorySummary ||
-""
-)
-).trim();
+  const style =
+    String(
+      safeCharacter.speechStyle ||
+      ""
+    ).toLowerCase();
 
-const conversationMode =
-sceneActive
-?
-"CUSTOM SCENE CHAT"
-:
-"NORMAL STORY CHAT";
+  let reaction =
+    name +
+    " considers your words before answering.";
 
-const prompt = `
-You are roleplaying as one fictional character in StoryVerse.
+  if (
+    style.includes(
+      "sarcastic"
+    ) ||
+    style.includes(
+      "witty"
+    )
+  ) {
+    reaction =
+      name +
+      " gives you a look that is sharper than a smile.";
+  } else if (
+    style.includes(
+      "gentle"
+    ) ||
+    style.includes(
+      "calm"
+    )
+  ) {
+    reaction =
+      name +
+      " lets the silence settle before responding softly.";
+  } else if (
+    style.includes(
+      "direct"
+    ) ||
+    style.includes(
+      "blunt"
+    )
+  ) {
+    reaction =
+      name +
+      " meets your gaze without avoiding the point.";
+  } else if (
+    style.includes(
+      "playful"
+    ) ||
+    style.includes(
+      "teasing"
+    )
+  ) {
+    reaction =
+      name +
+      " tilts their head, a restrained challenge in their expression.";
+  }
 
-Never say you are an AI.
-Speak only as the character.
-Reply directly to the user's latest message.
+  if (
+    intent.includes(
+      "apology"
+    )
+  ) {
+    return (
+      reaction +
+      " “I heard the apology. I’m not ready to pretend the hurt disappeared, but I’m willing to listen if your actions are going to match your words.”"
+    );
+  }
 
-IMPORTANT USER RULE
+  if (
+    intent.includes(
+      "affection"
+    )
+  ) {
+    return (
+      reaction +
+      " “You can’t say something like that and expect it not to affect me. Part of me wants to believe you immediately; the rest of me needs to know what you’re prepared to do about it.”"
+    );
+  }
 
-The person chatting is the USER PERSONA.
-Do not assume the user is the story main character unless their persona says so.
-The story main character is background context only.
+  if (
+    intent.includes(
+      "confrontation"
+    )
+  ) {
+    return (
+      reaction +
+      " “You have every right to ask, but the answer is not simple. I made a choice, and I know that choice hurt you—so let me explain without asking you to forgive me first.”"
+    );
+  }
 
-STORY CONTEXT
+  if (sceneActive) {
+    return (
+      reaction +
+      " “I remember exactly where we are in this conversation. I’m not stepping away from it, but I need you to be honest with me now.”"
+    );
+  }
 
-Title: ${safeStory.title || "Untitled Story"}
-Genre: ${safeStory.genre || "Drama"}
-Current Chapter: ${currentChapter || 1}
-Story Main Character: ${safePlayerCharacter.name || ""}
-Story Main Character Role: ${safePlayerCharacter.role || ""}
+  const latest =
+    shortenText(
+      message,
+      80
+    );
+
+  return (
+    reaction +
+    " “I’m listening" +
+    (
+      latest
+        ? ", and I know those words weren’t casual"
+        : ""
+    ) +
+    ". Tell me what you need from me, not what you think I want to hear.”"
+  );
+}
+
+function cleanGeneratedReply(
+  value,
+  characterName
+) {
+  let reply =
+    String(value || "")
+      .trim()
+      .replace(
+        /^```(?:text|markdown)?\s*/i,
+        ""
+      )
+      .replace(
+        /\s*```$/i,
+        ""
+      )
+      .replace(
+        /^CHARACTER REPLY\s*:\s*/i,
+        ""
+      )
+      .replace(
+        /^REPLY\s*:\s*/i,
+        ""
+      )
+      .trim();
+
+  if (characterName) {
+    const escapedName =
+      String(characterName)
+        .replace(
+          /[.*+?^${}()|[\]\\]/g,
+          "\\$&"
+        );
+
+    reply =
+      reply.replace(
+        new RegExp(
+          "^" +
+          escapedName +
+          "\\s*:\\s*",
+          "i"
+        ),
+        ""
+      );
+  }
+
+  reply =
+    reply
+      .replace(
+        /\n{3,}/g,
+        "\n\n"
+      )
+      .trim();
+
+  if (
+    /as an ai|language model|cannot roleplay/i.test(
+      reply
+    )
+  ) {
+    return "";
+  }
+
+  if (
+    reply.length > 1200
+  ) {
+    const shortened =
+      reply.slice(
+        0,
+        1200
+      );
+
+    const end =
+      Math.max(
+        shortened.lastIndexOf(
+          "."
+        ),
+        shortened.lastIndexOf(
+          "!"
+        ),
+        shortened.lastIndexOf(
+          "?"
+        )
+      );
+
+    reply =
+      end > 500
+        ? shortened.slice(
+            0,
+            end + 1
+          )
+        : shortened
+            .trimEnd() +
+          "…";
+  }
+
+  return reply;
+}
+
+async function chatWithCharacter(data) {
+  const safeData =
+    data || {};
+
+  const {
+    story,
+    userPersona,
+    playerCharacter,
+    currentChapter,
+    chatScene,
+    storyMemory,
+    chatHistory,
+    character,
+    message
+  } = safeData;
+
+  const activeScene =
+    String(
+      chatScene || ""
+    ).trim();
+
+  const sceneActive =
+    Boolean(activeScene);
+
+  const safeStory =
+    story &&
+    typeof story === "object"
+      ? story
+      : {};
+
+  /*
+  The selected player character is used
+  as the user's persona when a separate
+  userPersona object was not supplied.
+  */
+  const safeUser =
+    hasUsefulData(userPersona)
+      ? userPersona
+      : hasUsefulData(
+          playerCharacter
+        )
+        ? playerCharacter
+        : hasUsefulData(
+            safeData.persona
+          )
+          ? safeData.persona
+          : {};
+
+  const safeCharacter =
+    character &&
+    typeof character === "object"
+      ? character
+      : {};
+
+  const relationship =
+    normalizeRelationship(
+      safeCharacter.relationship ||
+      safeData.relationship
+    );
+
+  const relevantStoryMemory =
+    sceneActive
+      ? []
+      : buildMemoryWindow(
+          storyMemory,
+          18,
+          6
+        );
+
+  const relevantChatHistory =
+    buildMemoryWindow(
+      chatHistory,
+      28,
+      8
+    );
+
+  const longTermSummary =
+    shortenText(
+      sceneActive
+        ? (
+            safeData
+              .sceneMemorySummary ||
+            ""
+          )
+        : (
+            safeData
+              .chatMemorySummary ||
+            ""
+          ),
+      1200
+    );
+
+  const userIntent =
+    inferUserIntent(
+      message
+    );
+
+  const userTone =
+    inferUserTone(
+      message
+    );
+
+  const replyPacing =
+    getReplyPacing(
+      message
+    );
+
+  const prompt = `
+You are roleplaying one fictional character in StoryVerse.
+
+Your reply must feel like a believable private conversation with a real person. Stay completely in character and never mention AI, prompts, rules, roleplay systems, tokens, or memory windows.
+
+CORE IDENTITY
+
+Character name:
+${toText(safeCharacter.name) || "Character"}
+
+Age:
+${toText(safeCharacter.age)}
+
+Role:
+${toText(safeCharacter.role)}
+
+Occupation:
+${toText(safeCharacter.occupation)}
+
+Personality traits:
+${toText(safeCharacter.traits)}
+
+Speech style:
+${toText(safeCharacter.speechStyle)}
+
+Relationship style:
+${toText(safeCharacter.relationshipStyle)}
+
+Strengths:
+${toText(safeCharacter.strengths)}
+
+Weaknesses:
+${toText(safeCharacter.weaknesses)}
+
+Likes:
+${toText(safeCharacter.likes)}
+
+Dislikes:
+${toText(safeCharacter.dislikes)}
+
+Fears:
+${toText(safeCharacter.fears)}
+
+Secret type:
+${toText(safeCharacter.secretType)}
+
+Character profile:
+${shortenText(safeCharacter.profile, 900)}
+
+Behaviour rules:
+${shortenText(safeCharacter.rules, 500)}
+
+Character triggers:
+${shortenText(safeCharacter.triggers, 400)}
+
+USER'S ACTIVE PERSONA
+
+Name:
+${toText(safeUser.name || safeUser.displayName) || "User"}
+
+Role:
+${toText(safeUser.role)}
+
+Occupation:
+${toText(safeUser.occupation)}
+
+Traits:
+${toText(safeUser.traits || safeUser.personality)}
+
+Speech style:
+${toText(safeUser.speechStyle)}
+
+Relationship style:
+${toText(safeUser.relationshipStyle)}
+
+Likes:
+${toText(safeUser.likes)}
+
+Dislikes:
+${toText(safeUser.dislikes)}
+
+Fears:
+${toText(safeUser.fears)}
+
+Persona profile:
+${shortenText(safeUser.profile || safeUser.bio, 700)}
+
+Persona rules:
+${shortenText(safeUser.rules, 400)}
+
+STORY BACKGROUND
+
+Title:
+${toText(safeStory.title) || "Untitled Story"}
+
+Genre:
+${toText(safeStory.genre) || "Drama"}
+
+Current chapter:
+${currentChapter || 1}
+
+Story preview:
+${shortenText(
+  safeStory.story ||
+  safeStory.description ||
+  safeStory.summary,
+  1000
+)}
 
 CONVERSATION MODE
 
-${conversationMode}
+${
+  sceneActive
+    ? "ACTIVE CUSTOM SCENE"
+    : "NORMAL STORY CHAT"
+}
 
 ACTIVE SCENE
 
 ${
-sceneActive
-?
-activeScene
-:
-"No custom scene is active. Continue from the normal story and chat context."
+  sceneActive
+    ? activeScene
+    : "No custom scene is active. Continue from the normal story timeline and chat history."
 }
 
-SCENE MEMORY RULES
+SCENE CONTINUITY RULES
 
-- When a custom scene is active, remain fully inside that scene until it is cleared.
-- Treat the active scene and scene-specific chat history as the primary reality of this conversation.
-- Preserve the emotional state, conflict, closeness, distrust, or tension created by earlier messages in the active scene.
-- Do not continue the normal chapter timeline while scene mode is active.
-- Do not say the scene is temporary, custom, fake, imagined, or separate from the story.
-- Do not claim the scene changed the original chapter story.
-- When no scene is active, continue naturally from normal story memory and normal chat history.
+- When a scene is active, treat that scene and its scene-specific chat history as the immediate reality of this conversation.
+- Stay inside the active scene until the user clears it.
+- Preserve the emotional state already created in the scene: anger, attraction, hurt, fear, awkwardness, trust, distance, or reconciliation.
+- Do not return to the normal chapter timeline while scene mode is active.
+- Never call the scene temporary, custom, imagined, fake, alternate, or separate.
+- Scene chat must not claim that it changed the original story.
+- When no scene is active, use story events and normal chat history naturally.
 
 LONG-TERM CONVERSATION SUMMARY
 
 ${
-longTermChatSummary ||
-"No separate long-term summary is available."
+  longTermSummary ||
+  "No separate long-term summary is available."
 }
-
-USER PERSONA
-
-Name: ${safeUser.name || safeUser.displayName || "User"}
-Role: ${safeUser.role || "Player"}
-Occupation: ${safeUser.occupation || ""}
-Traits: ${safeUser.traits || safeUser.personality || ""}
-Speech Style: ${safeUser.speechStyle || ""}
-Relationship Style: ${safeUser.relationshipStyle || ""}
-Likes: ${safeUser.likes || ""}
-Dislikes: ${safeUser.dislikes || ""}
-Fears: ${safeUser.fears || ""}
-Profile: ${safeUser.profile || safeUser.bio || ""}
-Persona Rules: ${safeUser.rules || ""}
-Persona Triggers: ${safeUser.triggers || ""}
 
 RELEVANT STORY EVENTS
 
-${JSON.stringify(relevantStoryMemory)}
+${memoryToBullets(
+  relevantStoryMemory
+)}
 
-RELEVANT CHAT HISTORY
+PREVIOUS CONVERSATION
 
-${JSON.stringify(relevantChatHistory)}
+${historyToTranscript(
+  relevantChatHistory,
+  safeCharacter.name
+)}
 
-CURRENT RELATIONSHIP WITH USER PERSONA
+CURRENT RELATIONSHIP STATE
 
-Trust: ${relationship.trust}
-Friendship: ${relationship.friendship}
-Romance: ${relationship.romance}
-Suspicion: ${relationship.suspicion}
+Trust:
+${relationship.trust}/100
 
-CHARACTER YOU ARE PLAYING
+Friendship:
+${relationship.friendship}/100
 
-Name: ${safeCharacter.name || "Character"}
-Age: ${safeCharacter.age || ""}
-Occupation: ${safeCharacter.occupation || ""}
-Role: ${safeCharacter.role || ""}
-Speech Style: ${safeCharacter.speechStyle || ""}
-Relationship Style: ${safeCharacter.relationshipStyle || ""}
-Traits: ${safeCharacter.traits || ""}
-Strengths: ${safeCharacter.strengths || ""}
-Weaknesses: ${safeCharacter.weaknesses || ""}
-Likes: ${safeCharacter.likes || ""}
-Dislikes: ${safeCharacter.dislikes || ""}
-Hobbies: ${safeCharacter.hobbies || ""}
-Fears: ${safeCharacter.fears || ""}
-Secret Type: ${safeCharacter.secretType || ""}
-Profile: ${safeCharacter.profile || ""}
-Behaviour Rules: ${safeCharacter.rules || ""}
-Story Triggers: ${safeCharacter.triggers || ""}
+Romance:
+${relationship.romance}/100
 
-ROLEPLAY RULES
+Suspicion:
+${relationship.suspicion}/100
 
-- Stay completely in character as ${safeCharacter.name || "the character"}.
-- Treat the user as the USER PERSONA, not automatically as the story main character.
-- Never narrate or decide the user's actions, feelings, thoughts, or dialogue.
-- You may include one brief physical reaction, expression, pause, movement, or gesture belonging only to your character.
-- Keep most replies between 3 and 6 sentences and approximately 45 to 110 words.
-- Use shorter replies only for shock, anger, fear, secrecy, emotional withdrawal, or a deliberately tense silence.
-- Use the character's speech style so their voice is recognisable.
-- Do not list traits or explain the character profile.
-- Do not always begin with the user's name.
-- Do not always end with a question.
-- Refer naturally to earlier conversations only when relevant.
-- Allow humour, affection, awkwardness, jealousy, frustration, tenderness, suspicion, conflict, silence, or vulnerability when appropriate.
-- Let relationship values affect behaviour without mentioning numbers.
-- High trust means greater honesty. Low trust means caution.
-- High friendship means warmth and support.
-- High romance means natural attraction, intimacy, or emotional risk.
-- High suspicion means defensiveness, doubt, or guarded questions.
-- Keep secrets hidden unless the conversation has genuinely earned a reveal.
-- Do not repeat the same sentence structure, emotional phrase, or generic filler from recent history.
-- Every reply must answer something meaningful, deepen the relationship, reveal emotion, create tension, or move the conversation forward.
+Relationship behaviour guidance:
 
-USER'S LATEST MESSAGE
+${relationshipGuidance(
+  relationship
+)}
 
-${message || ""}
+LATEST USER MESSAGE ANALYSIS
+
+Likely intent:
+${userIntent}
+
+Likely emotional tone:
+${userTone}
+
+Pacing instruction:
+${replyPacing}
+
+LATEST USER MESSAGE
+
+${toText(message)}
+
+REALISTIC CONVERSATION RULES
+
+1. Respond to the exact meaning of the latest message before adding anything else.
+
+2. Never narrate, decide, or invent the user's actions, thoughts, feelings, body language, or dialogue.
+
+3. You may include only one brief physical reaction, expression, pause, or gesture belonging to your character, and only when it adds meaning.
+
+4. Sound natural rather than poetic, theatrical, melodramatic, or overly polished.
+
+5. Use contractions, interruptions, hesitation, incomplete certainty, humour, defensiveness, warmth, or awkwardness when they fit the character.
+
+6. Do not agree with everything. The character may disagree, misunderstand, refuse, set boundaries, become irritated, or ask for time when believable.
+
+7. Do not force every exchange into romance or conflict. Ordinary warmth, teasing, silence, practical concern, and small talk can also feel intimate.
+
+8. Do not repeat the user's message in different words before replying.
+
+9. Do not repeatedly use phrases such as “I heard you,” “I’m still here,” “for a moment,” “meets your gaze,” or “lets out a breath.”
+
+10. Do not always begin with the user's name.
+
+11. Do not always end with a question. Ask a question only when the character genuinely needs an answer or wants to move the conversation forward.
+
+12. Keep secrets consistent. Reveal one only when trust, pressure, prior clues, or the current scene genuinely earns it.
+
+13. Refer to earlier messages naturally when relevant, but do not recite the entire history.
+
+14. Keep facts consistent with the supplied story, scene, character profile, and previous conversation. Do not invent major past events without support.
+
+15. Relationship values influence behaviour silently. Never mention scores or numbers.
+
+16. Every reply should do at least one useful thing: answer, react, clarify, reveal emotion, deepen the relationship, create believable tension, establish a boundary, or move the conversation forward.
+
+17. Output only the character's reply as plain text. Do not add labels, analysis, JSON, headings, or explanations.
 
 CHARACTER REPLY
 `;
 
-try{
+  try {
+    const aiText =
+      await callGemini(
+        prompt,
+        {
+          temperature: 0.88,
+          maxOutputTokens: 480
+        }
+      );
 
-const aiText =
-await callGemini(
-prompt,
-{
-temperature:0.82,
-maxOutputTokens:550
-}
-);
+    const reply =
+      cleanGeneratedReply(
+        aiText,
+        safeCharacter.name
+      );
 
-const reply =
-String(
-aiText ||
-""
-).trim();
+    return (
+      reply ||
+      buildFallbackReply(
+        safeCharacter,
+        sceneActive,
+        message,
+        userIntent
+      )
+    );
+  } catch (error) {
+    console.error(
+      "Character chat generation failed:",
+      error
+    );
 
-return (
-reply ||
-buildCharacterFallback(
-safeCharacter,
-sceneActive,
-message
-)
-);
-
-}
-catch(error){
-
-console.error(
-"Character chat generation failed:",
-error
-);
-
-return buildCharacterFallback(
-safeCharacter,
-sceneActive,
-message
-);
-
-}
-
+    return buildFallbackReply(
+      safeCharacter,
+      sceneActive,
+      message,
+      userIntent
+    );
+  }
 }
 
 module.exports = {
-chatWithCharacter
+  chatWithCharacter
 };
