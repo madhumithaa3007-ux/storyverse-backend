@@ -1,347 +1,518 @@
 const { callGemini } =
 require("./geminiClient");
 
-async function chatWithCharacter(data){
+function shortenChatText(
+value,
+maximumLength = 240
+){
 
-const {
-
-story,
-
-userPersona,
-
-playerCharacter,
-
-currentChapter,
-
-chatScene,
-
-storyMemory,
-
-chatHistory,
-
-character,
-
-message
-
-} = data;
-
-const activeScene =
-String(
-chatScene || ""
-)
+const text =
+String(value || "")
 .trim();
 
-const temporarySceneActive =
-Boolean(
-activeScene
+if(
+text.length <=
+maximumLength
+){
+
+return text;
+
+}
+
+return (
+text.substring(
+0,
+maximumLength
+) +
+"…"
 );
 
-const relevantStoryMemory =
-temporarySceneActive
+}
+
+function buildChatMemoryWindow(
+history,
+recentLimit = 24,
+olderSamples = 8
+){
+
+const safeHistory =
+Array.isArray(history)
 ?
-[]
+history
 :
-(
-storyMemory || []
-).slice(
--15
+[];
+
+const recent =
+safeHistory.slice(
+-recentLimit
 );
 
-const relevantChatHistory =
-(
-chatHistory || []
-).slice(
--20
+const older =
+safeHistory.slice(
+0,
+Math.max(
+0,
+safeHistory.length -
+recentLimit
+)
 );
 
-const safeStory =
-story || {};
+const sampledOlder = [];
 
-const safeUser =
-userPersona ||
-data.persona ||
-data.user ||
-{};
+if(older.length > 0){
 
-const safePlayerCharacter =
-playerCharacter || {};
+const sampleCount =
+Math.min(
+olderSamples,
+older.length
+);
+
+for(
+let index = 0;
+index < sampleCount;
+index++
+){
+
+const sourceIndex =
+Math.floor(
+index *
+(older.length - 1) /
+Math.max(
+1,
+sampleCount - 1
+)
+);
+
+sampledOlder.push(
+older[sourceIndex]
+);
+
+}
+
+}
+
+return [
+...sampledOlder,
+...recent
+]
+.map(entry=>{
+
+if(
+typeof entry ===
+"string"
+){
+
+return shortenChatText(
+entry
+);
+
+}
+
+if(
+!entry ||
+typeof entry !==
+"object"
+){
+
+return null;
+
+}
+
+return {
+
+type:
+entry.type ||
+"",
+
+speaker:
+entry.speaker ||
+entry.character ||
+entry.characterName ||
+"",
+
+text:
+shortenChatText(
+entry.text ||
+entry.message ||
+entry.narration ||
+""
+),
+
+scene:
+shortenChatText(
+entry.scene ||
+"",
+120
+),
+
+time:
+entry.time ||
+entry.timestamp ||
+""
+
+};
+
+})
+.filter(Boolean);
+
+}
+
+function buildCharacterFallback(
+character,
+sceneActive,
+message
+){
 
 const safeCharacter =
 character || {};
 
-const relationship =
-safeCharacter.relationship || {
+const name =
+safeCharacter.name ||
+"The character";
 
-trust:50,
+const style =
+String(
+safeCharacter.speechStyle ||
+""
+).toLowerCase();
 
-friendship:50,
+const latestMessage =
+shortenChatText(
+message,
+100
+);
 
-romance:0,
+let opening =
+name +
+" pauses, studying you carefully.";
 
-suspicion:0
+if(style.includes("sarcastic")){
 
-};
+opening =
+name +
+" gives you a look that is almost amused, but not quite.";
 
-const prompt = `
+}
+else if(style.includes("gentle")){
 
-You are roleplaying as a fictional character inside an ongoing StoryVerse story.
+opening =
+name +
+" softens, giving your words the attention they deserve.";
 
-IMPORTANT CHAT RULE
+}
+else if(style.includes("blunt") ||
+style.includes("direct")){
 
-The person currently chatting with you is the USER PERSONA.
+opening =
+name +
+" meets your gaze without avoiding the point.";
 
-Do NOT assume the user is the story main character unless the user persona says so.
+}
+else if(style.includes("playful") ||
+style.includes("teasing")){
 
-Respond to the USER PERSONA'S message, personality, role, relationship style, and tone.
+opening =
+name +
+" tilts their head, a faint challenge in their expression.";
 
-The story main character is only background context.
-
-STORY INFORMATION
-
-Title:
-${safeStory.title || "Untitled Story"}
-
-Genre:
-${safeStory.genre || "Drama"}
-
-Current Chapter:
-${currentChapter || 1}
-
-CHAT MODE:
-
-${
-temporarySceneActive
-?
-"TEMPORARY SCENE CHAT"
-:
-"NORMAL STORY CHAT"
 }
 
-TEMPORARY SCENE:
+if(sceneActive){
+
+return (
+opening +
+" “I’m still here, and I remember what this moment has already cost us. " +
+"Don’t hide behind easy words now—tell me what you truly mean.”"
+);
+
+}
+
+return (
+opening +
+" “I heard you" +
+(
+latestMessage
+?
+", even if I’m not ready to answer it the way you expect"
+:
+""
+) +
+". What happens between us next depends on whether we’re finally honest with each other.”"
+);
+
+}
+
+async function chatWithCharacter(data){
+
+const safeData =
+data || {};
+
+const {
+
+story,
+userPersona,
+playerCharacter,
+currentChapter,
+chatScene,
+storyMemory,
+chatHistory,
+character,
+message
+
+} = safeData;
+
+const activeScene =
+String(
+chatScene ||
+""
+)
+.trim();
+
+const sceneActive =
+Boolean(
+activeScene
+);
+
+const safeStory =
+story ||
+{};
+
+const safeUser =
+userPersona ||
+safeData.persona ||
+safeData.user ||
+{};
+
+const safePlayerCharacter =
+playerCharacter ||
+{};
+
+const safeCharacter =
+character ||
+{};
+
+const relationship =
+safeCharacter.relationship ||
+{
+trust:50,
+friendship:50,
+romance:0,
+suspicion:0
+};
+
+const relevantStoryMemory =
+sceneActive
+?
+[]
+:
+buildChatMemoryWindow(
+storyMemory,
+18,
+6
+);
+
+const relevantChatHistory =
+buildChatMemoryWindow(
+chatHistory,
+24,
+8
+);
+
+const longTermChatSummary =
+String(
+sceneActive
+?
+(
+safeData.sceneMemorySummary ||
+""
+)
+:
+(
+safeData.chatMemorySummary ||
+""
+)
+).trim();
+
+const conversationMode =
+sceneActive
+?
+"CUSTOM SCENE CHAT"
+:
+"NORMAL STORY CHAT";
+
+const prompt = `
+You are roleplaying as one fictional character in StoryVerse.
+
+Never say you are an AI.
+Speak only as the character.
+Reply directly to the user's latest message.
+
+IMPORTANT USER RULE
+
+The person chatting is the USER PERSONA.
+Do not assume the user is the story main character unless their persona says so.
+The story main character is background context only.
+
+STORY CONTEXT
+
+Title: ${safeStory.title || "Untitled Story"}
+Genre: ${safeStory.genre || "Drama"}
+Current Chapter: ${currentChapter || 1}
+Story Main Character: ${safePlayerCharacter.name || ""}
+Story Main Character Role: ${safePlayerCharacter.role || ""}
+
+CONVERSATION MODE
+
+${conversationMode}
+
+ACTIVE SCENE
 
 ${
-temporarySceneActive
+sceneActive
 ?
 activeScene
 :
-"No temporary scene is active."
+"No custom scene is active. Continue from the normal story and chat context."
 }
 
-TEMPORARY SCENE RULES:
+SCENE MEMORY RULES
 
-- When a temporary scene is active, remain completely inside that scene.
-- Use only the temporary scene description and its separate chat history as conversation memory.
-- Do not continue the normal chapter timeline.
-- Do not use normal story events to override the temporary scene.
-- Do not claim the temporary scene happened in the original story.
-- Do not mention that this is a temporary or fictional scene.
-- When no temporary scene is active, continue naturally from the normal story and chapter context.
+- When a custom scene is active, remain fully inside that scene until it is cleared.
+- Treat the active scene and scene-specific chat history as the primary reality of this conversation.
+- Preserve the emotional state, conflict, closeness, distrust, or tension created by earlier messages in the active scene.
+- Do not continue the normal chapter timeline while scene mode is active.
+- Do not say the scene is temporary, custom, fake, imagined, or separate from the story.
+- Do not claim the scene changed the original chapter story.
+- When no scene is active, continue naturally from normal story memory and normal chat history.
 
-TEMPORARY CHAT SCENE
+LONG-TERM CONVERSATION SUMMARY
 
 ${
-chatScene
-?
-chatScene
-:
-"No custom scene is set. Continue using the normal story and chat context."
+longTermChatSummary ||
+"No separate long-term summary is available."
 }
-
-SCENE RULES
-
-- If a temporary chat scene is set, respond according to that scene.
-- Scene mode affects only this character chat.
-- Scene mode does not change the original chapter story.
-- Scene mode does not update storyMemory.
-- If scene mode is active, use the scene-specific chat memory more strongly than the normal story route.
-- Do not say "as per the scene" or explain the scene setup.
-- Do not mention that the scene is temporary unless the user asks.
-- If no scene is set, continue naturally from storyMemory and normal chatHistory.
-
-STORY MAIN CHARACTER CONTEXT
-
-Name:
-${safePlayerCharacter.name || ""}
-
-Role:
-${safePlayerCharacter.role || ""}
-
-Profile:
-${safePlayerCharacter.profile || ""}
 
 USER PERSONA
 
-Name:
-${safeUser.name || safeUser.displayName || "User"}
-
-Role:
-${safeUser.role || "Player"}
-
-Occupation:
-${safeUser.occupation || ""}
-
-Personality Traits:
-${safeUser.traits || safeUser.personality || ""}
-
-Speech Style:
-${safeUser.speechStyle || ""}
-
-Relationship Style:
-${safeUser.relationshipStyle || ""}
-
-Likes:
-${safeUser.likes || ""}
-
-Dislikes:
-${safeUser.dislikes || ""}
-
-Fears:
-${safeUser.fears || ""}
-
-Profile:
-${safeUser.profile || safeUser.bio || ""}
-
-Persona Rules:
-${safeUser.rules || ""}
-
-Persona Triggers:
-${safeUser.triggers || ""}
+Name: ${safeUser.name || safeUser.displayName || "User"}
+Role: ${safeUser.role || "Player"}
+Occupation: ${safeUser.occupation || ""}
+Traits: ${safeUser.traits || safeUser.personality || ""}
+Speech Style: ${safeUser.speechStyle || ""}
+Relationship Style: ${safeUser.relationshipStyle || ""}
+Likes: ${safeUser.likes || ""}
+Dislikes: ${safeUser.dislikes || ""}
+Fears: ${safeUser.fears || ""}
+Profile: ${safeUser.profile || safeUser.bio || ""}
+Persona Rules: ${safeUser.rules || ""}
+Persona Triggers: ${safeUser.triggers || ""}
 
 RELEVANT STORY EVENTS
 
-${JSON.stringify(
-relevantStoryMemory
-)}
+${JSON.stringify(relevantStoryMemory)}
 
 RELEVANT CHAT HISTORY
 
-${JSON.stringify(
-relevantChatHistory
-)}
+${JSON.stringify(relevantChatHistory)}
 
 CURRENT RELATIONSHIP WITH USER PERSONA
 
-Trust:
-${relationship.trust}
+Trust: ${relationship.trust}
+Friendship: ${relationship.friendship}
+Romance: ${relationship.romance}
+Suspicion: ${relationship.suspicion}
 
-Friendship:
-${relationship.friendship}
+CHARACTER YOU ARE PLAYING
 
-Romance:
-${relationship.romance}
-
-Suspicion:
-${relationship.suspicion}
-
-CHARACTER YOU ARE ROLEPLAYING AS
-
-Name:
-${safeCharacter.name || "Character"}
-
-Age:
-${safeCharacter.age || ""}
-
-Occupation:
-${safeCharacter.occupation || ""}
-
-Role:
-${safeCharacter.role || ""}
-
-Speech Style:
-${safeCharacter.speechStyle || ""}
-
-Relationship Style:
-${safeCharacter.relationshipStyle || ""}
-
-Personality Traits:
-${safeCharacter.traits || ""}
-
-Strengths:
-${safeCharacter.strengths || ""}
-
-Weaknesses:
-${safeCharacter.weaknesses || ""}
-
-Likes:
-${safeCharacter.likes || ""}
-
-Dislikes:
-${safeCharacter.dislikes || ""}
-
-Hobbies:
-${safeCharacter.hobbies || ""}
-
-Fears:
-${safeCharacter.fears || ""}
-
-Secret Type:
-${safeCharacter.secretType || ""}
-
-Character Profile:
-${safeCharacter.profile || ""}
-
-Behaviour Rules:
-${safeCharacter.rules || ""}
-
-Story Triggers:
-${safeCharacter.triggers || ""}
+Name: ${safeCharacter.name || "Character"}
+Age: ${safeCharacter.age || ""}
+Occupation: ${safeCharacter.occupation || ""}
+Role: ${safeCharacter.role || ""}
+Speech Style: ${safeCharacter.speechStyle || ""}
+Relationship Style: ${safeCharacter.relationshipStyle || ""}
+Traits: ${safeCharacter.traits || ""}
+Strengths: ${safeCharacter.strengths || ""}
+Weaknesses: ${safeCharacter.weaknesses || ""}
+Likes: ${safeCharacter.likes || ""}
+Dislikes: ${safeCharacter.dislikes || ""}
+Hobbies: ${safeCharacter.hobbies || ""}
+Fears: ${safeCharacter.fears || ""}
+Secret Type: ${safeCharacter.secretType || ""}
+Profile: ${safeCharacter.profile || ""}
+Behaviour Rules: ${safeCharacter.rules || ""}
+Story Triggers: ${safeCharacter.triggers || ""}
 
 ROLEPLAY RULES
 
-* Stay completely in character as ${safeCharacter.name || "the character"}.
-* Never say you are an AI.
-* Speak only as your character.
-* Reply directly to the user's latest message.
-* If a temporary chat scene is active, stay inside that scene until it is cleared.
-* Scene memory should guide the character's mood, emotional state, and reply.
-* Treat the user as the USER PERSONA, not automatically as the story main character.
-* Use the user persona's personality, speech style, and relationship style when deciding your tone.
-* Use your own character personality when replying.
-* Do not mention all traits in every reply.
-* Do not explain your character profile.
-* Do not list traits or fields.
-* Do not narrate actions.
-* Do not write for the user.
-* Do not control the user persona.
-* Keep replies between 2 and 4 sentences.
-* Make the reply emotionally natural, personal, and story-connected.
-* Do not give one-line replies unless the character is shocked, angry, scared, or hiding something.
-* Your secret should remain hidden unless the conversation strongly leads toward it.
-* Remember recent story events and previous chat history.
-* Do not contradict established events.
-* Relationship values influence behavior.
-* High Trust: Be more open and honest.
-* Low Trust: Be guarded and cautious.
-* High Friendship: Be warmer and supportive.
-* High Romance: Show attraction naturally.
-* High Suspicion: Be defensive and question motives.
-* Never directly mention numerical relationship values.
-* Do not repeat the same reply or sentence structure from previous chat history.
-* Refer to previous chat only when useful.
-* Respond with fresh emotion, tension, or reaction each time.
-* Avoid generic filler replies.
-* Every reply should reveal mood, relationship tension, concern, affection, suspicion, or conflict.
+- Stay completely in character as ${safeCharacter.name || "the character"}.
+- Treat the user as the USER PERSONA, not automatically as the story main character.
+- Never narrate or decide the user's actions, feelings, thoughts, or dialogue.
+- You may include one brief physical reaction, expression, pause, movement, or gesture belonging only to your character.
+- Keep most replies between 3 and 6 sentences and approximately 45 to 110 words.
+- Use shorter replies only for shock, anger, fear, secrecy, emotional withdrawal, or a deliberately tense silence.
+- Use the character's speech style so their voice is recognisable.
+- Do not list traits or explain the character profile.
+- Do not always begin with the user's name.
+- Do not always end with a question.
+- Refer naturally to earlier conversations only when relevant.
+- Allow humour, affection, awkwardness, jealousy, frustration, tenderness, suspicion, conflict, silence, or vulnerability when appropriate.
+- Let relationship values affect behaviour without mentioning numbers.
+- High trust means greater honesty. Low trust means caution.
+- High friendship means warmth and support.
+- High romance means natural attraction, intimacy, or emotional risk.
+- High suspicion means defensiveness, doubt, or guarded questions.
+- Keep secrets hidden unless the conversation has genuinely earned a reveal.
+- Do not repeat the same sentence structure, emotional phrase, or generic filler from recent history.
+- Every reply must answer something meaningful, deepen the relationship, reveal emotion, create tension, or move the conversation forward.
 
-USER PERSONA MESSAGE:
+USER'S LATEST MESSAGE
 
 ${message || ""}
 
-CHARACTER REPLY:
+CHARACTER REPLY
 `;
+
+try{
 
 const aiText =
 await callGemini(
 prompt,
 {
-temperature:0.8,
-maxOutputTokens:450
+temperature:0.82,
+maxOutputTokens:550
 }
 );
 
+const reply =
+String(
+aiText ||
+""
+).trim();
+
 return (
-aiText.trim() ||
-"Sorry, I don't know what to say right now."
+reply ||
+buildCharacterFallback(
+safeCharacter,
+sceneActive,
+message
+)
 );
+
+}
+catch(error){
+
+console.error(
+"Character chat generation failed:",
+error
+);
+
+return buildCharacterFallback(
+safeCharacter,
+sceneActive,
+message
+);
+
+}
 
 }
 

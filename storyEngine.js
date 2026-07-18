@@ -1,351 +1,32 @@
 const { callGemini } =
 require("./geminiClient");
 
-async function generateStory(storyData){
+function clampChapterCount(value){
 
-const title =
-storyData.title || "Untitled Story";
+const parsed =
+parseInt(value);
 
-const genre =
-storyData.genre || "Drama";
+if(Number.isNaN(parsed)){
 
-const mood =
-storyData.mood || "Emotional";
+return 20;
 
-const theme =
-storyData.theme || "Secrets and Lies";
-
-const worldSetting =
-storyData.worldSetting || "Modern City";
-
-const romanceType =
-storyData.romanceType || "Slow Burn";
-
-const conflictType =
-storyData.conflictType || "Hidden Secret";
-
-const storyLength =
-storyData.storyLength || "20";
-
-const characterCount =
-storyData.characterCount || "auto";
-
-const endingCount =
-storyData.endingCount || "3";
-
-const idea =
-storyData.idea || "A character enters a life-changing story full of emotion, secrets, and difficult choices.";
-
-const prompt = `
-
-You are StoryVerse AI.
-
-Create content for an interactive story game.
-
-Return ONLY valid JSON.
-Do not include markdown.
-Do not include explanation outside JSON.
-Do not wrap JSON in code blocks.
-
-The user has created a story idea. Your job is to generate:
-
-1. A short story preview
-2. A suggested character cast with complete character input data
-
-STORY INPUTS
-
-Story Title:
-${title}
-
-Genre:
-${genre}
-
-Mood:
-${mood}
-
-Theme:
-${theme}
-
-World Setting:
-${worldSetting}
-
-Romance Type:
-${romanceType}
-
-Conflict Type:
-${conflictType}
-
-Story Length:
-${storyLength} chapters
-
-Requested Character Count:
-${characterCount}
-
-Ending Count:
-${endingCount}
-
-Story Idea:
-${idea}
-
-OUTPUT JSON FORMAT
-
-{
-  "storyPreview":"Short story preview here",
-  "suggestedCharacters":[
-    {
-      "name":"Character Name",
-      "age":"Age",
-      "gender":"Male/Female/Other",
-      "occupation":"Occupation",
-      "role":"Role in Story",
-      "traits":"Trait 1, Trait 2, Trait 3",
-      "speechStyle":"Speech Style",
-      "relationshipStyle":"Relationship Style",
-      "strengths":"Strength 1, Strength 2, Strength 3",
-      "weaknesses":"Weakness 1, Weakness 2, Weakness 3",
-      "likes":"Like 1, Like 2, Like 3",
-      "dislikes":"Dislike 1, Dislike 2, Dislike 3",
-      "hobbies":"Hobby 1, Hobby 2",
-      "fears":"Fear 1, Fear 2",
-      "secretType":"Secret Type",
-      "rules":"Short behaviour rules",
-      "profile":"Character preview paragraph"
-    }
-  ],
-  "chapterPlan":[
-    {
-      "chapter":1,
-      "title":"Chapter Title",
-      "goal":"Main purpose of this chapter",
-      "setting":"Main location or atmosphere",
-      "keyEvents":[
-        "Important event 1",
-        "Important event 2",
-        "Important event 3"
-      ],
-      "emotionalFocus":"Main emotion or relationship tension",
-      "requiredReveal":"Important clue, truth, danger, or relationship shift that should happen",
-      "choiceImpact":"How player choices can change the emotional/mystery/risky route while keeping the base story",
-      "cliffhanger":"How this chapter should end"
-    }
-  ]
 }
 
-STORY PREVIEW RULES
-
-- Write the storyPreview in 150 to 220 words.
-- It should feel like a story game preview.
-- Include emotional hook, main conflict, mystery, romance tension, and setting.
-- Do not write Chapter 1.
-- Do not reveal the full ending.
-- Do not explain every twist.
-- Do not make it too long.
-- Do not end abruptly.
-
-SUGGESTED CHARACTER RULES
-
-SUGGESTED CHARACTER RULES
-
-- Maximum character limit is 12.
-- Never create more than 12 characters.
-- Never repeat the same character name in one story.
-- Every character in suggestedCharacters must have a unique name.
-- If Requested Character Count is a number from 1 to 12, create exactly that many characters.
-- If Requested Character Count is auto:
-  - Read the Story Idea carefully.
-  - If the user mentions a direct count like "10 characters", create exactly 10 characters.
-  - If the user mentions role counts like "1 love interest, 1 main character mom, 1 villain", create characters matching those requested roles first.
-  - If the story idea does not clearly mention count, create 6 to 8 characters based on story depth.
-- If the story idea asks for more than 12 characters, create only the 12 most important characters.
-- If the user asks for specific role counts, honor those role counts first.
-- Examples:
-  - "love interest 1" means create exactly one Love Interest unless the user asks for more.
-  - "main character mom 1" means create one Main Character's Mother.
-  - "two brothers" means create two brother-type characters if suitable.
-  - "6 childhood friends" means create six friend-group characters.
-- Must include one Main Character unless the user clearly says otherwise.
-- Must include at least one Love Interest if romance type is relevant or requested.
-- Include supporting characters useful for drama, mystery, conflict, or emotional development.
-- At least one character must have a secret.
-- Do not make all characters similar.
-- Give each character a useful role in the story.
-- Keep character profiles between 70 and 110 words each.
-
-NAME RULES
-
-Use varied names. Do not keep using the same names in every story.
-
-Use names from this name bank when suitable, but do not repeat names inside one story:
-
-Aarav, Aadhya, Arjun, Ananya, Riya, Rohan, Meera, Kabir, Tara, Dev, Isha, Vihaan, Nila, Kavin, Aanya, Reyansh, Diya, Varun, Priya, Nikhil, Kavya, Akash, Sanjana, Aditya, Ishaan, Neha, Maya, Aryan, Zoya, Aria, Kiara, Karthik, Shravan, Mira, Leela, Amara, Elena, Elias, Noah, Liam, Ava, Sophia, Ethan, Lucas, Olivia, Emma, Daniel, Clara, Julian, Iris, Adrian, Serena, Nathan, Aurora, Ezra, Luna, Felix, Freya, Theo, Isla, Cassian, Celeste, Rowan, Maeve, Soren, Lyra, Rafael, Valeria, Milo, Daphne, Zane, Alina, Cyrus, Elara, Ronan, Selene, Matteo, Liora, Luca, Nadia, Dante, Evie, Jasper, Mirae, Hana, Kai, Yuna, Minho, Sora, Jisoo, Ren, Aiko, Haru, Mei, Kenji, Ayla, Samir, Laila, Omar, Noor, Zain, Yasmin.
-
-- Choose names that fit the genre, culture, and setting.
-- Do not use placeholder names like Character 1 unless absolutely necessary.
-
-USE ONLY THESE ROLE OPTIONS WHEN POSSIBLE
-
-Main Character,
-Love Interest,
-Best Friend,
-Main Character's Mother,
-Main Character's Father,
-Main Character's Brother,
-Main Character's Sister,
-Main Character's Cousin,
-Main Character's Childhood Friend,
-Main Character's Mentor,
-Main Character's Boss,
-Main Character's Ex,
-Love Interest's Mother,
-Love Interest's Father,
-Love Interest's Brother,
-Love Interest's Sister,
-Love Interest's Best Friend,
-Love Interest's Ex,
-Rival,
-Villain,
-Guardian,
-Teacher,
-Colleague,
-Detective,
-Mystery Stranger
-
-USE ONLY THESE SPEECH STYLE OPTIONS WHEN POSSIBLE
-
-Formal,
-Casual,
-Polite,
-Friendly,
-Professional,
-Confident,
-Calm,
-Gentle,
-Cheerful,
-Playful,
-Flirtatious,
-Sarcastic,
-Teasing,
-Blunt,
-Direct,
-Reserved,
-Shy,
-Mysterious,
-Elegant,
-Charming,
-Witty,
-Passionate,
-Emotional,
-Protective,
-Authoritative
-
-USE ONLY THESE RELATIONSHIP STYLE OPTIONS WHEN POSSIBLE
-
-Friendly,
-Romantic,
-Reserved,
-Tsundere,
-Protective,
-Supportive,
-Affectionate,
-Loyal,
-Trusting,
-Independent,
-Shy,
-Playful,
-Flirtatious,
-Possessive,
-Jealous,
-Suspicious,
-Guarded,
-Manipulative,
-Competitive,
-Devoted,
-Forgiving,
-Emotionally Distant,
-Protective Mentor,
-Secret Admirer,
-Childhood Companion,
-Rival Turned Ally,
-Obsessively Attached,
-Teasing,
-Respectful,
-Dependable
-
-USE ONLY THESE SECRET TYPE OPTIONS WHEN POSSIBLE
-
-Family Secret,
-Identity Secret,
-Love Secret,
-Hidden Past,
-Medical Secret,
-Criminal Secret,
-Corporate Secret,
-Government Secret,
-Supernatural Secret,
-Lost Heir Secret,
-Double Life Secret,
-Hidden Relationship,
-Blackmail Secret,
-Forbidden Power,
-Secret Child,
-Unknown Parentage,
-Memory Loss Secret,
-Witness Protection,
-Revenge Secret,
-Inheritance Secret,
-Hidden Wealth,
-Secret Organization,
-Former Criminal,
-Secret Marriage,
-False Identity,
-Buried Evidence,
-Hidden Sibling,
-Secret Mission,
-Murder Witness,
-Royal Bloodline
-
-CHAPTER PLAN RULES
-
-- Create exactly ${storyLength} chapterPlan objects.
-- The chapterPlan must cover the full story from beginning to ending.
-- Each chapter must feel connected to the previous chapter.
-- Each chapter must have a clear story goal.
-- Each chapter must include 3 to 5 keyEvents.
-- Each chapter must include one requiredReveal.
-- Each chapter must include one cliffhanger.
-- The story should feel pre-planned, not random.
-- Choices may change emotional route, relationship route, mystery route, or risky route.
-- But the base story route must remain consistent.
-- Do not resolve the main conflict too early.
-- Chapter 1 should introduce the setup, characters, and first major hook.
-- Middle chapters should develop secrets, romance, mystery, betrayal, danger, or emotional conflict.
-- Final chapters should build toward endings based on choices.
-- Keep each chapterPlan object concise but specific.
-
-IMPORTANT
-
-Return JSON only.
-The JSON must be valid.
-The suggestedCharacters value must be an array.
-The chapterPlan value must be an array.
-
-`;
-
-const aiText =
-await callGemini(
-prompt,
-{
-temperature:0.8,
-responseMimeType:"application/json",
-maxOutputTokens:6000
-}
+return Math.max(
+1,
+Math.min(
+30,
+parsed
+)
 );
 
-try{
+}
+
+function cleanJsonText(aiText){
 
 let cleaned =
-aiText
-.replace(/```json/g,"")
+String(aiText || "")
+.replace(/```json/gi,"")
 .replace(/```/g,"")
 .trim();
 
@@ -357,7 +38,7 @@ cleaned.lastIndexOf("}");
 
 if(
 firstBrace !== -1 &&
-lastBrace !== -1
+lastBrace > firstBrace
 ){
 
 cleaned =
@@ -368,86 +49,591 @@ lastBrace + 1
 
 }
 
-const parsed =
-JSON.parse(cleaned);
+return cleaned;
 
-const suggestedCharacters =
-normalizeSuggestedCharacters(
-parsed.suggestedCharacters,
-characterCount,
-idea
+}
+
+function extractStoryPreview(aiText){
+
+const rawText =
+String(aiText || "")
+.trim();
+
+if(!rawText){
+
+return "";
+
+}
+
+try{
+
+const parsed =
+JSON.parse(
+cleanJsonText(rawText)
 );
 
-const chapterPlan =
-Array.isArray(parsed.chapterPlan)
+return String(
+parsed.storyPreview ||
+parsed.story ||
+""
+).trim();
+
+}
+catch(error){
+
+const match =
+rawText.match(
+/"storyPreview"\s*:\s*"([\s\S]*?)"\s*,\s*"chapterPlan"/
+);
+
+if(match && match[1]){
+
+return match[1]
+.replace(/\\n/g,"\n")
+.replace(/\\"/g,'"')
+.trim();
+
+}
+
+return rawText
+.replace(/```json/gi,"")
+.replace(/```/g,"")
+.trim();
+
+}
+
+}
+
+function createFallbackChapterPlan(
+storyData,
+chapterCount
+){
+
+const title =
+String(
+storyData.title ||
+"Untitled Story"
+).trim();
+
+const mainConflict =
+String(
+storyData.conflictType ||
+"the central conflict"
+).trim();
+
+const romance =
+String(
+storyData.romanceType ||
+"the central relationship"
+).trim();
+
+return Array.from(
+{
+length:
+chapterCount
+},
+(_,index)=>{
+
+const chapterNumber =
+index + 1;
+
+const progress =
+chapterNumber /
+chapterCount;
+
+let phase =
+"development";
+
+if(chapterNumber === 1){
+
+phase =
+"opening";
+
+}
+else if(progress <= 0.3){
+
+phase =
+"rising";
+
+}
+else if(progress <= 0.65){
+
+phase =
+"midpoint";
+
+}
+else if(progress < 1){
+
+phase =
+"late";
+
+}
+else{
+
+phase =
+"finale";
+
+}
+
+const phaseContent = {
+
+opening:{
+
+title:
+"The First Turning Point",
+
+goal:
+"Introduce the player, the important relationships, and the event that makes the old life impossible to continue.",
+
+keyEvents:[
+"Establish the player's everyday situation and strongest emotional need.",
+"Bring the most important characters into direct contact.",
+"Trigger the incident that begins the main conflict."
+],
+
+reveal:
+"Reveal the first sign that the situation is more complicated than it appears.",
+
+cliffhanger:
+"End with a discovery, arrival, threat, or emotional shock that forces the player forward."
+
+},
+
+rising:{
+
+title:
+"Pressure Beneath the Surface",
+
+goal:
+"Deepen the conflict and make the player's relationships affect what can happen next.",
+
+keyEvents:[
+"Create a consequence from an earlier action or choice.",
+"Develop trust, attraction, rivalry, suspicion, or family tension.",
+"Reveal a clue or complication connected to " + mainConflict + "."
+],
+
+reveal:
+"Reveal information that changes how the player understands one important character.",
+
+cliffhanger:
+"End when a plan fails, a secret is nearly exposed, or an unexpected person intervenes."
+
+},
+
+midpoint:{
+
+title:
+"The Truth Changes Shape",
+
+goal:
+"Deliver a major turning point that changes the player's goal or understanding of the story.",
+
+keyEvents:[
+"Force the player to confront the cost of earlier choices.",
+"Shift an important relationship through confession, betrayal, protection, or conflict.",
+"Reveal a major truth connected to " + mainConflict + "."
+],
+
+reveal:
+"Reveal a truth that makes the original problem larger or more personal.",
+
+cliffhanger:
+"End with a decision or danger that makes returning to the old path impossible."
+
+},
+
+late:{
+
+title:
+"Everything at Risk",
+
+goal:
+"Bring the major relationships, secrets, and threats into direct conflict.",
+
+keyEvents:[
+"Make a previous choice produce a visible reward or consequence.",
+"Push " + romance + " toward closeness, rupture, sacrifice, or honesty.",
+"Move the player closer to confronting the source of " + mainConflict + "."
+],
+
+reveal:
+"Reveal the final missing information needed to understand the true conflict.",
+
+cliffhanger:
+"End with betrayal, danger, separation, exposure, or a final impossible choice."
+
+},
+
+finale:{
+
+title:
+"The Final Choice",
+
+goal:
+"Resolve the central conflict while allowing earlier choices and relationships to shape the ending.",
+
+keyEvents:[
+"Bring the player face to face with the central conflict.",
+"Pay off the most important relationship and mystery threads.",
+"Let the player's accumulated choices influence the final outcome."
+],
+
+reveal:
+"Reveal the final truth and the real cost of the ending.",
+
+cliffhanger:
+"Conclude the story with a satisfying emotional image, consequence, or earned final revelation."
+
+}
+
+};
+
+const content =
+phaseContent[phase];
+
+return {
+
+chapter:
+chapterNumber,
+
+title:
+chapterNumber === 1 ||
+chapterNumber === chapterCount
 ?
-parsed.chapterPlan.slice(
-0,
-parseInt(storyLength) || 20
-)
+content.title
+:
+"Chapter " + chapterNumber + ": " + content.title,
+
+goal:
+content.goal,
+
+setting:
+String(
+storyData.worldSetting ||
+"The story's established setting"
+),
+
+keyEvents:
+content.keyEvents,
+
+emotionalFocus:
+"Let the player's choices alter trust, tension, vulnerability, loyalty, suspicion, or romance without abandoning the planned route.",
+
+requiredReveal:
+content.reveal,
+
+choiceImpact:
+"Emotional, relationship, mystery, and risky choices may change reactions, alliances, clues, and consequences while preserving the chapter's main goal.",
+
+cliffhanger:
+content.cliffhanger
+
+};
+
+}
+);
+
+}
+
+function normalizeChapterPlan(
+rawPlan,
+chapterCount,
+storyData
+){
+
+const fallbackPlan =
+createFallbackChapterPlan(
+storyData,
+chapterCount
+);
+
+const safePlan =
+Array.isArray(rawPlan)
+?
+rawPlan
+:
+[];
+
+return Array.from(
+{
+length:
+chapterCount
+},
+(_,index)=>{
+
+const fallback =
+fallbackPlan[index];
+
+const source =
+safePlan.find(item=>{
+
+return Number(item && item.chapter) ===
+index + 1;
+
+}) ||
+safePlan[index] ||
+{};
+
+const keyEvents =
+Array.isArray(source.keyEvents)
+?
+source.keyEvents
+.map(event=>String(event || "").trim())
+.filter(Boolean)
+.slice(0,5)
 :
 [];
 
 return {
 
-storyPreview:
-parsed.storyPreview || "",
+chapter:
+index + 1,
 
-suggestedCharacters:
-suggestedCharacters,
+title:
+String(
+source.title ||
+fallback.title
+).trim(),
 
-chapterPlan:
-chapterPlan
+goal:
+String(
+source.goal ||
+fallback.goal
+).trim(),
+
+setting:
+String(
+source.setting ||
+fallback.setting
+).trim(),
+
+keyEvents:
+keyEvents.length > 0
+?
+keyEvents
+:
+fallback.keyEvents,
+
+emotionalFocus:
+String(
+source.emotionalFocus ||
+fallback.emotionalFocus
+).trim(),
+
+requiredReveal:
+String(
+source.requiredReveal ||
+fallback.requiredReveal
+).trim(),
+
+choiceImpact:
+String(
+source.choiceImpact ||
+fallback.choiceImpact
+).trim(),
+
+cliffhanger:
+String(
+source.cliffhanger ||
+fallback.cliffhanger
+).trim()
 
 };
 
 }
-
-catch(error){
-
-console.error(
-"Story JSON Parse Error:"
 );
 
-console.error(error);
+}
 
-console.error(
-"Raw AI Response:"
+async function generateStory(storyData){
+
+const safeData =
+storyData || {};
+
+const title =
+safeData.title ||
+"Untitled Story";
+
+const genre =
+safeData.genre ||
+"Drama";
+
+const mood =
+safeData.mood ||
+"Emotional";
+
+const theme =
+safeData.theme ||
+"Secrets and Lies";
+
+const worldSetting =
+safeData.worldSetting ||
+"Modern City";
+
+const romanceType =
+safeData.romanceType ||
+"Slow Burn";
+
+const conflictType =
+safeData.conflictType ||
+"Hidden Secret";
+
+const chapterCount =
+clampChapterCount(
+safeData.storyLength
 );
 
-console.error(aiText);
+const endingCount =
+safeData.endingCount ||
+"3";
 
-let fallbackPreview =
-aiText;
+const idea =
+safeData.idea ||
+"A character enters a life-changing story full of emotion, secrets, and difficult choices.";
+
+const prompt = `
+You are StoryVerse AI.
+
+Create the foundation for an interactive story game.
+
+Return ONLY valid JSON.
+Do not include markdown.
+Do not include explanation outside JSON.
+Do not wrap JSON in code blocks.
+
+Generate only:
+1. A concise story preview.
+2. A connected chapter-by-chapter route for the entire story.
+
+Characters are generated separately.
+Do not return suggestedCharacters or full character profiles.
+
+STORY INPUTS
+
+Title: ${title}
+Genre: ${genre}
+Mood: ${mood}
+Theme: ${theme}
+World Setting: ${worldSetting}
+Romance Type: ${romanceType}
+Conflict Type: ${conflictType}
+Chapter Count: ${chapterCount}
+Possible Ending Count: ${endingCount}
+Story Idea: ${idea}
+
+OUTPUT JSON FORMAT
+
+{
+  "storyPreview":"A complete 150 to 220 word preview",
+  "chapterPlan":[
+    {
+      "chapter":1,
+      "title":"Specific chapter title",
+      "goal":"The main purpose of this chapter",
+      "setting":"Main location and atmosphere",
+      "keyEvents":[
+        "Specific event 1",
+        "Specific event 2",
+        "Specific event 3"
+      ],
+      "emotionalFocus":"The main emotional or relationship tension",
+      "requiredReveal":"The clue, truth, danger, or relationship shift that must happen",
+      "choiceImpact":"How choices can change reactions and consequences without abandoning the base route",
+      "cliffhanger":"The planned chapter ending"
+    }
+  ]
+}
+
+STORY PREVIEW RULES
+
+- Write 150 to 220 words.
+- Present the setup, emotional hook, central conflict, important relationship tension, mystery, and setting.
+- Do not write Chapter 1.
+- Do not reveal the complete ending.
+- End with a complete and compelling hook, not an abrupt sentence.
+
+CHAPTER PLAN RULES
+
+- Create exactly ${chapterCount} chapter objects.
+- Plan the complete story from opening to final resolution.
+- Every chapter must continue from the previous chapter.
+- Every chapter must have one clear goal.
+- Include exactly 3 concise but specific key events per chapter.
+- Include one required reveal or meaningful shift per chapter.
+- Include one planned cliffhanger or strong closing beat per chapter.
+- Do not solve the main conflict too early.
+- Early chapters introduce the cast, conflict, and first hook.
+- Middle chapters deepen secrets, romance, rivalry, betrayal, danger, and emotional consequences.
+- Late chapters bring relationships, clues, and threats into direct conflict.
+- The final chapter resolves the central conflict and supports multiple endings shaped by accumulated choices.
+- Choices may change relationships, clues, alliances, emotional tone, and consequences, but the base plot must remain coherent.
+- Keep each chapter object concise enough for valid JSON.
+
+Return valid JSON only.
+`;
+
+let aiText =
+"";
 
 try{
 
-const match =
-aiText.match(
-/"storyPreview"\s*:\s*"([\s\S]*?)"\s*,\s*"suggestedCharacters"/
+aiText =
+await callGemini(
+prompt,
+{
+temperature:0.72,
+responseMimeType:"application/json",
+maxOutputTokens:5200
+}
 );
 
-if(
-match &&
-match[1]
-){
-
-fallbackPreview =
-match[1]
-.replace(/\\"/g,'"')
-.replace(/\\n/g,"\n");
-
-}
-
-}
-catch(parseError){
-
-console.error(
-"Fallback story preview extraction failed:"
+const parsed =
+JSON.parse(
+cleanJsonText(aiText)
 );
 
+const storyPreview =
+String(
+parsed.storyPreview ||
+parsed.story ||
+""
+).trim();
+
+return {
+
+storyPreview:
+storyPreview ||
+String(idea).trim(),
+
+/*
+Keep this empty property temporarily so older
+frontend and server code does not break.
+*/
+suggestedCharacters:[],
+
+chapterPlan:
+normalizeChapterPlan(
+parsed.chapterPlan,
+chapterCount,
+safeData
+)
+
+};
+
+}
+catch(error){
+
 console.error(
-parseError
+"Story generation or JSON parsing failed:",
+error
+);
+
+if(aiText){
+
+console.error(
+"Raw AI response:",
+aiText
 );
 
 }
@@ -455,134 +641,20 @@ parseError
 return {
 
 storyPreview:
-fallbackPreview,
+extractStoryPreview(aiText) ||
+String(idea).trim(),
 
-suggestedCharacters:
-[],
+suggestedCharacters:[],
 
 chapterPlan:
-[]
+createFallbackChapterPlan(
+safeData,
+chapterCount
+)
 
 };
 
 }
-
-}
-
-function getTargetCharacterLimit(characterCount){
-
-const raw =
-String(characterCount || "auto")
-.toLowerCase()
-.trim();
-
-if(raw === "auto"){
-
-return 12;
-
-}
-
-const parsed =
-parseInt(raw);
-
-if(isNaN(parsed)){
-
-return 12;
-
-}
-
-return Math.max(
-1,
-Math.min(
-12,
-parsed
-)
-);
-
-}
-
-function normalizeSuggestedCharacters(
-characters,
-characterCount,
-idea
-){
-
-const nameBank = [
-"Aarav","Aadhya","Arjun","Ananya","Riya","Rohan","Meera","Kabir","Tara","Dev",
-"Isha","Vihaan","Nila","Kavin","Aanya","Reyansh","Diya","Varun","Priya","Nikhil",
-"Kavya","Akash","Sanjana","Aditya","Ishaan","Neha","Maya","Aryan","Zoya","Aria",
-"Kiara","Karthik","Shravan","Mira","Leela","Amara","Elena","Elias","Noah","Liam",
-"Ava","Sophia","Ethan","Lucas","Olivia","Emma","Daniel","Clara","Julian","Iris",
-"Adrian","Serena","Nathan","Aurora","Ezra","Luna","Felix","Freya","Theo","Isla",
-"Cassian","Celeste","Rowan","Maeve","Soren","Lyra","Rafael","Valeria","Milo","Daphne",
-"Zane","Alina","Cyrus","Elara","Ronan","Selene","Matteo","Liora","Luca","Nadia",
-"Dante","Evie","Jasper","Hana","Kai","Yuna","Minho","Sora","Ren","Aiko",
-"Haru","Mei","Kenji","Ayla","Samir","Laila","Omar","Noor","Zain","Yasmin"
-];
-
-if(!Array.isArray(characters)){
-
-return [];
-
-}
-
-const limit =
-getTargetCharacterLimit(
-characterCount
-);
-
-const usedNames =
-new Set();
-
-const cleaned =
-characters
-.slice(0,limit)
-.map((character,index)=>{
-
-const safeCharacter =
-character || {};
-
-let name =
-String(
-safeCharacter.name ||
-""
-).trim();
-
-if(
-!name ||
-usedNames.has(
-name.toLowerCase()
-)
-){
-
-name =
-nameBank.find(bankName=>{
-
-return !usedNames.has(
-bankName.toLowerCase()
-);
-
-}) ||
-"Character " + (index + 1);
-
-}
-
-usedNames.add(
-name.toLowerCase()
-);
-
-return {
-
-...safeCharacter,
-
-name:
-name
-
-};
-
-});
-
-return cleaned;
 
 }
 
