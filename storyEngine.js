@@ -1,513 +1,639 @@
-const { callGemini } =
-require("./geminiClient");
+const { callGemini } = require("./geminiClient");
 
-function clampChapterCount(value){
+function clampNumber(value, minimum, maximum, fallback) {
+  const parsed = Number.parseInt(value, 10);
 
-const parsed =
-parseInt(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
 
-if(Number.isNaN(parsed)){
-
-return 20;
-
+  return Math.max(
+    minimum,
+    Math.min(maximum, parsed)
+  );
 }
 
-return Math.max(
-1,
-Math.min(
-30,
-parsed
-)
-);
+function cleanJsonText(value) {
+  let result = String(value || "")
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
 
+  const firstBrace =
+    result.indexOf("{");
+
+  const lastBrace =
+    result.lastIndexOf("}");
+
+  if (
+    firstBrace !== -1 &&
+    lastBrace > firstBrace
+  ) {
+    result =
+      result.slice(
+        firstBrace,
+        lastBrace + 1
+      );
+  }
+
+  return result;
 }
 
-function cleanJsonText(aiText){
+function text(value, fallback = "") {
+  const result =
+    String(value ?? "").trim();
 
-let cleaned =
-String(aiText || "")
-.replace(/```json/gi,"")
-.replace(/```/g,"")
-.trim();
-
-const firstBrace =
-cleaned.indexOf("{");
-
-const lastBrace =
-cleaned.lastIndexOf("}");
-
-if(
-firstBrace !== -1 &&
-lastBrace > firstBrace
-){
-
-cleaned =
-cleaned.substring(
-firstBrace,
-lastBrace + 1
-);
-
+  return result || fallback;
 }
 
-return cleaned;
+function shortText(
+  value,
+  maximum = 260,
+  fallback = ""
+) {
+  const result =
+    text(value, fallback);
 
+  if (result.length <= maximum) {
+    return result;
+  }
+
+  return (
+    result
+      .slice(0, maximum)
+      .trimEnd() +
+    "…"
+  );
 }
 
-function extractStoryPreview(aiText){
+function stringArray(
+  value,
+  maximumItems,
+  maximumLength
+) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
 
-const rawText =
-String(aiText || "")
-.trim();
-
-if(!rawText){
-
-return "";
-
+  return value
+    .map(item => {
+      return shortText(
+        item,
+        maximumLength
+      );
+    })
+    .filter(Boolean)
+    .slice(0, maximumItems);
 }
 
-try{
+function getStoryPhase(
+  chapterNumber,
+  chapterCount
+) {
+  if (chapterNumber === 1) {
+    return "opening";
+  }
 
-const parsed =
-JSON.parse(
-cleanJsonText(rawText)
-);
+  if (
+    chapterNumber ===
+    chapterCount
+  ) {
+    return "finale";
+  }
 
-return String(
-parsed.storyPreview ||
-parsed.story ||
-""
-).trim();
+  const progress =
+    chapterNumber /
+    chapterCount;
 
-}
-catch(error){
+  if (progress <= 0.25) {
+    return "rising";
+  }
 
-const match =
-rawText.match(
-/"storyPreview"\s*:\s*"([\s\S]*?)"\s*,\s*"chapterPlan"/
-);
+  if (progress <= 0.5) {
+    return "midpoint";
+  }
 
-if(match && match[1]){
+  if (progress <= 0.78) {
+    return "escalation";
+  }
 
-return match[1]
-.replace(/\\n/g,"\n")
-.replace(/\\"/g,'"')
-.trim();
-
-}
-
-return rawText
-.replace(/```json/gi,"")
-.replace(/```/g,"")
-.trim();
-
+  return "crisis";
 }
 
+function createFallbackChapter(
+  storyData,
+  chapterNumber,
+  chapterCount
+) {
+  const phase =
+    getStoryPhase(
+      chapterNumber,
+      chapterCount
+    );
+
+  const conflict =
+    text(
+      storyData.conflictType,
+      "the main conflict"
+    );
+
+  const romance =
+    text(
+      storyData.romanceType,
+      "the central relationship"
+    );
+
+  const setting =
+    text(
+      storyData.worldSetting,
+      "the established story world"
+    );
+
+  const templates = {
+    opening: {
+      title:
+        "The Moment Everything Changes",
+
+      goal:
+        "Establish the player's ordinary life, strongest emotional need, and the incident that forces the story to begin.",
+
+      beats: [
+        "Open inside an ordinary but emotionally revealing moment.",
+
+        "Bring an important relationship into direct contact with the player.",
+
+        "Interrupt normal life with the first sign of danger, opportunity, or unresolved history.",
+
+        "Make the player's first meaningful choice alter how another character responds.",
+
+        "Reveal that the initial problem is connected to something more personal."
+      ],
+
+      reveal:
+        "The player learns that the triggering event is not accidental.",
+
+      cliffhanger:
+        "A new arrival, discovery, message, or threat makes returning to normal impossible."
+    },
+
+    rising: {
+      title:
+        "Pressure Under the Surface",
+
+      goal:
+        "Deepen the conflict while allowing choices to shape trust, suspicion, attraction, and alliances.",
+
+      beats: [
+        "Show a believable consequence from the previous chapter.",
+
+        `Complicate ${romance} through closeness, misunderstanding, jealousy, restraint, or honesty.`,
+
+        `Introduce a practical obstacle connected to ${conflict}.`,
+
+        "Let a supporting character reveal an unexpected motive or vulnerability.",
+
+        "Force the player to choose what or whom to prioritise."
+      ],
+
+      reveal:
+        "A trusted explanation is proven incomplete or misleading.",
+
+      cliffhanger:
+        "A plan fails or a secret nearly reaches the wrong person."
+    },
+
+    midpoint: {
+      title:
+        "The Truth Changes Shape",
+
+      goal:
+        "Deliver a major turning point that changes the player's understanding, priorities, or relationships.",
+
+      beats: [
+        "Begin with the consequences of the player's strongest earlier decision.",
+
+        "Bring two competing relationships or loyalties into conflict.",
+
+        "Reveal a truth that reinterprets an earlier event.",
+
+        "Give the player a chance to protect, confront, forgive, investigate, or withdraw.",
+
+        "Make the cost of continuing emotionally and practically clear."
+      ],
+
+      reveal:
+        `The real source or personal cost of ${conflict} becomes visible.`,
+
+      cliffhanger:
+        "A betrayal, confession, disappearance, or irreversible decision closes the old path."
+    },
+
+    escalation: {
+      title:
+        "What the Choices Cost",
+
+      goal:
+        "Make accumulated choices produce visible rewards, losses, tension, loyalty, and changed behaviour.",
+
+      beats: [
+        "Open with a relationship reacting to the player's history rather than only the latest action.",
+
+        "Allow a quieter human moment before pressure returns.",
+
+        "Turn one old clue, promise, or mistake into a present complication.",
+
+        "Push an ally, rival, or love interest to make a choice of their own.",
+
+        "Move the player closer to the source of the conflict while reducing safe options."
+      ],
+
+      reveal:
+        "Someone important has been hiding a motive, sacrifice, or divided loyalty.",
+
+      cliffhanger:
+        "The player is exposed, separated, trapped, or forced into a dangerous alliance."
+    },
+
+    crisis: {
+      title:
+        "Everything at Risk",
+
+      goal:
+        "Bring the main secrets, relationships, and threats into direct collision before the finale.",
+
+      beats: [
+        "Show the immediate damage caused by the previous cliffhanger.",
+
+        "Make the most important relationship demand honesty or commitment.",
+
+        "Reveal the final missing clue needed to understand the conflict.",
+
+        "Force a sacrifice, confrontation, or risky plan.",
+
+        "Leave the player with one final unresolved danger or emotional decision."
+      ],
+
+      reveal:
+        "The full truth is known, but acting on it will cost the player something important.",
+
+      cliffhanger:
+        "The antagonist, danger, or emotional conflict gains temporary control just before the final confrontation."
+    },
+
+    finale: {
+      title:
+        "The Choice That Remains",
+
+      goal:
+        "Resolve the central conflict and let accumulated choices shape the emotional and practical ending.",
+
+      beats: [
+        "Bring the player face to face with the central conflict.",
+
+        "Pay off the most important clue, promise, wound, and relationship tension.",
+
+        "Give major characters agency in the final confrontation.",
+
+        "Let earlier choices alter who helps, trusts, leaves, forgives, or sacrifices.",
+
+        "End with a clear consequence and an emotionally earned final image."
+      ],
+
+      reveal:
+        "The final truth and the real cost of victory, love, justice, freedom, or forgiveness are revealed.",
+
+      cliffhanger:
+        "Conclude the story rather than creating another unresolved chapter."
+    }
+  };
+
+  const source =
+    templates[phase];
+
+  return {
+    chapter:
+      chapterNumber,
+
+    title:
+      chapterNumber === 1 ||
+      chapterNumber === chapterCount
+        ? source.title
+        : `Chapter ${chapterNumber}: ${source.title}`,
+
+    goal:
+      source.goal,
+
+    setting:
+      setting,
+
+    continuityFromPrevious:
+      chapterNumber === 1
+        ? "The story begins here."
+        : "Begin with the emotional and practical consequences of the previous chapter's ending.",
+
+    routeBeats:
+      source.beats,
+
+    emotionalFocus:
+      "Allow trust, suspicion, affection, rivalry, humour, fear, grief, and vulnerability to change naturally through player choices.",
+
+    requiredReveal:
+      source.reveal,
+
+    choiceImpact:
+      "Choices may change reactions, access to information, alliances, relationship warmth, risk, and the form of the consequence while preserving the chapter's main destination.",
+
+    endingState:
+      phase === "finale"
+        ? "The main conflict is resolved and the ending reflects accumulated choices."
+        : "The chapter goal is achieved or transformed, but the next problem is now unavoidable.",
+
+    cliffhanger:
+      source.cliffhanger
+  };
 }
 
 function createFallbackChapterPlan(
-storyData,
-chapterCount
-){
-
-const title =
-String(
-storyData.title ||
-"Untitled Story"
-).trim();
-
-const mainConflict =
-String(
-storyData.conflictType ||
-"the central conflict"
-).trim();
-
-const romance =
-String(
-storyData.romanceType ||
-"the central relationship"
-).trim();
-
-return Array.from(
-{
-length:
-chapterCount
-},
-(_,index)=>{
-
-const chapterNumber =
-index + 1;
-
-const progress =
-chapterNumber /
-chapterCount;
-
-let phase =
-"development";
-
-if(chapterNumber === 1){
-
-phase =
-"opening";
-
-}
-else if(progress <= 0.3){
-
-phase =
-"rising";
-
-}
-else if(progress <= 0.65){
-
-phase =
-"midpoint";
-
-}
-else if(progress < 1){
-
-phase =
-"late";
-
-}
-else{
-
-phase =
-"finale";
-
-}
-
-const phaseContent = {
-
-opening:{
-
-title:
-"The First Turning Point",
-
-goal:
-"Introduce the player, the important relationships, and the event that makes the old life impossible to continue.",
-
-keyEvents:[
-"Establish the player's everyday situation and strongest emotional need.",
-"Bring the most important characters into direct contact.",
-"Trigger the incident that begins the main conflict."
-],
-
-reveal:
-"Reveal the first sign that the situation is more complicated than it appears.",
-
-cliffhanger:
-"End with a discovery, arrival, threat, or emotional shock that forces the player forward."
-
-},
-
-rising:{
-
-title:
-"Pressure Beneath the Surface",
-
-goal:
-"Deepen the conflict and make the player's relationships affect what can happen next.",
-
-keyEvents:[
-"Create a consequence from an earlier action or choice.",
-"Develop trust, attraction, rivalry, suspicion, or family tension.",
-"Reveal a clue or complication connected to " + mainConflict + "."
-],
-
-reveal:
-"Reveal information that changes how the player understands one important character.",
-
-cliffhanger:
-"End when a plan fails, a secret is nearly exposed, or an unexpected person intervenes."
-
-},
-
-midpoint:{
-
-title:
-"The Truth Changes Shape",
-
-goal:
-"Deliver a major turning point that changes the player's goal or understanding of the story.",
-
-keyEvents:[
-"Force the player to confront the cost of earlier choices.",
-"Shift an important relationship through confession, betrayal, protection, or conflict.",
-"Reveal a major truth connected to " + mainConflict + "."
-],
-
-reveal:
-"Reveal a truth that makes the original problem larger or more personal.",
-
-cliffhanger:
-"End with a decision or danger that makes returning to the old path impossible."
-
-},
-
-late:{
-
-title:
-"Everything at Risk",
-
-goal:
-"Bring the major relationships, secrets, and threats into direct conflict.",
-
-keyEvents:[
-"Make a previous choice produce a visible reward or consequence.",
-"Push " + romance + " toward closeness, rupture, sacrifice, or honesty.",
-"Move the player closer to confronting the source of " + mainConflict + "."
-],
-
-reveal:
-"Reveal the final missing information needed to understand the true conflict.",
-
-cliffhanger:
-"End with betrayal, danger, separation, exposure, or a final impossible choice."
-
-},
-
-finale:{
-
-title:
-"The Final Choice",
-
-goal:
-"Resolve the central conflict while allowing earlier choices and relationships to shape the ending.",
-
-keyEvents:[
-"Bring the player face to face with the central conflict.",
-"Pay off the most important relationship and mystery threads.",
-"Let the player's accumulated choices influence the final outcome."
-],
-
-reveal:
-"Reveal the final truth and the real cost of the ending.",
-
-cliffhanger:
-"Conclude the story with a satisfying emotional image, consequence, or earned final revelation."
-
-}
-
-};
-
-const content =
-phaseContent[phase];
-
-return {
-
-chapter:
-chapterNumber,
-
-title:
-chapterNumber === 1 ||
-chapterNumber === chapterCount
-?
-content.title
-:
-"Chapter " + chapterNumber + ": " + content.title,
-
-goal:
-content.goal,
-
-setting:
-String(
-storyData.worldSetting ||
-"The story's established setting"
-),
-
-keyEvents:
-content.keyEvents,
-
-emotionalFocus:
-"Let the player's choices alter trust, tension, vulnerability, loyalty, suspicion, or romance without abandoning the planned route.",
-
-requiredReveal:
-content.reveal,
-
-choiceImpact:
-"Emotional, relationship, mystery, and risky choices may change reactions, alliances, clues, and consequences while preserving the chapter's main goal.",
-
-cliffhanger:
-content.cliffhanger
-
-};
-
-}
-);
-
+  storyData,
+  chapterCount
+) {
+  return Array.from(
+    {
+      length:
+        chapterCount
+    },
+    (_, index) => {
+      return createFallbackChapter(
+        storyData,
+        index + 1,
+        chapterCount
+      );
+    }
+  );
 }
 
 function normalizeChapterPlan(
-rawPlan,
-chapterCount,
-storyData
-){
+  rawPlan,
+  storyData,
+  chapterCount
+) {
+  const raw =
+    Array.isArray(rawPlan)
+      ? rawPlan
+      : [];
 
-const fallbackPlan =
-createFallbackChapterPlan(
-storyData,
-chapterCount
-);
+  const fallback =
+    createFallbackChapterPlan(
+      storyData,
+      chapterCount
+    );
 
-const safePlan =
-Array.isArray(rawPlan)
-?
-rawPlan
-:
-[];
+  return Array.from(
+    {
+      length:
+        chapterCount
+    },
+    (_, index) => {
+      const chapterNumber =
+        index + 1;
 
-return Array.from(
-{
-length:
-chapterCount
-},
-(_,index)=>{
+      const source =
+        raw.find(item => {
+          return (
+            Number(
+              item &&
+              item.chapter
+            ) ===
+            chapterNumber
+          );
+        })
+        ||
+        raw[index]
+        ||
+        {};
 
-const fallback =
-fallbackPlan[index];
+      const backup =
+        fallback[index];
 
-const source =
-safePlan.find(item=>{
+      const routeBeats =
+        stringArray(
+          source.routeBeats ||
+          source.keyEvents,
+          5,
+          220
+        );
 
-return Number(item && item.chapter) ===
-index + 1;
+      return {
+        chapter:
+          chapterNumber,
 
-}) ||
-safePlan[index] ||
-{};
+        title:
+          shortText(
+            source.title,
+            100,
+            backup.title
+          ),
 
-const keyEvents =
-Array.isArray(source.keyEvents)
-?
-source.keyEvents
-.map(event=>String(event || "").trim())
-.filter(Boolean)
-.slice(0,5)
-:
-[];
+        goal:
+          shortText(
+            source.goal,
+            320,
+            backup.goal
+          ),
 
-return {
+        setting:
+          shortText(
+            source.setting,
+            220,
+            backup.setting
+          ),
 
-chapter:
-index + 1,
+        continuityFromPrevious:
+          shortText(
+            source.continuityFromPrevious,
+            260,
+            backup.continuityFromPrevious
+          ),
 
-title:
-String(
-source.title ||
-fallback.title
-).trim(),
+        routeBeats:
+          routeBeats.length === 5
+            ? routeBeats
+            : backup.routeBeats,
 
-goal:
-String(
-source.goal ||
-fallback.goal
-).trim(),
+        /*
+        Keep keyEvents for compatibility
+        with older Chapter Play code.
+        */
+        keyEvents:
+          routeBeats.length > 0
+            ? routeBeats
+            : backup.routeBeats,
 
-setting:
-String(
-source.setting ||
-fallback.setting
-).trim(),
+        emotionalFocus:
+          shortText(
+            source.emotionalFocus,
+            280,
+            backup.emotionalFocus
+          ),
 
-keyEvents:
-keyEvents.length > 0
-?
-keyEvents
-:
-fallback.keyEvents,
+        requiredReveal:
+          shortText(
+            source.requiredReveal,
+            280,
+            backup.requiredReveal
+          ),
 
-emotionalFocus:
-String(
-source.emotionalFocus ||
-fallback.emotionalFocus
-).trim(),
+        choiceImpact:
+          shortText(
+            source.choiceImpact,
+            300,
+            backup.choiceImpact
+          ),
 
-requiredReveal:
-String(
-source.requiredReveal ||
-fallback.requiredReveal
-).trim(),
+        endingState:
+          shortText(
+            source.endingState,
+            260,
+            backup.endingState
+          ),
 
-choiceImpact:
-String(
-source.choiceImpact ||
-fallback.choiceImpact
-).trim(),
-
-cliffhanger:
-String(
-source.cliffhanger ||
-fallback.cliffhanger
-).trim()
-
-};
-
+        cliffhanger:
+          shortText(
+            source.cliffhanger,
+            280,
+            backup.cliffhanger
+          )
+      };
+    }
+  );
 }
-);
 
+function extractStoryPreview(
+  rawResponse,
+  fallback
+) {
+  const raw =
+    String(
+      rawResponse || ""
+    ).trim();
+
+  if (!raw) {
+    return fallback;
+  }
+
+  try {
+    const parsed =
+      JSON.parse(
+        cleanJsonText(raw)
+      );
+
+    return text(
+      parsed.storyPreview ||
+      parsed.story,
+      fallback
+    );
+  }
+  catch (error) {
+    const match =
+      raw.match(
+        /"storyPreview"\s*:\s*"([\s\S]*?)"\s*,\s*"chapterPlan"/
+      );
+
+    if (
+      match &&
+      match[1]
+    ) {
+      return match[1]
+        .replace(
+          /\\n/g,
+          "\n"
+        )
+        .replace(
+          /\\"/g,
+          '"'
+        )
+        .trim();
+    }
+
+    return fallback;
+  }
 }
 
-async function generateStory(storyData){
+async function generateStory(
+  storyData
+) {
+  const data =
+    storyData || {};
 
-const safeData =
-storyData || {};
+  const title =
+    text(
+      data.title,
+      "Untitled Story"
+    );
 
-const title =
-safeData.title ||
-"Untitled Story";
+  const genre =
+    text(
+      data.genre,
+      "Drama"
+    );
 
-const genre =
-safeData.genre ||
-"Drama";
+  const mood =
+    text(
+      data.mood,
+      "Emotional"
+    );
 
-const mood =
-safeData.mood ||
-"Emotional";
+  const theme =
+    text(
+      data.theme,
+      "Secrets and Choices"
+    );
 
-const theme =
-safeData.theme ||
-"Secrets and Lies";
+  const worldSetting =
+    text(
+      data.worldSetting,
+      "Modern City"
+    );
 
-const worldSetting =
-safeData.worldSetting ||
-"Modern City";
+  const romanceType =
+    text(
+      data.romanceType,
+      "Slow Burn"
+    );
 
-const romanceType =
-safeData.romanceType ||
-"Slow Burn";
+  const conflictType =
+    text(
+      data.conflictType,
+      "Hidden Secret"
+    );
 
-const conflictType =
-safeData.conflictType ||
-"Hidden Secret";
+  const chapterCount =
+    clampNumber(
+      data.storyLength,
+      1,
+      30,
+      20
+    );
 
-const chapterCount =
-clampChapterCount(
-safeData.storyLength
-);
+  const endingCount =
+    clampNumber(
+      data.endingCount,
+      1,
+      8,
+      3
+    );
 
-const endingCount =
-safeData.endingCount ||
-"3";
+  const idea =
+    text(
+      data.idea,
+      "A character is pulled into a life-changing conflict where relationships and choices shape what happens next."
+    );
 
-const idea =
-safeData.idea ||
-"A character enters a life-changing story full of emotion, secrets, and difficult choices.";
-
-const prompt = `
-You are StoryVerse AI.
-
-Create the foundation for an interactive story game.
+  const prompt = `
+You are StoryVerse AI, planning a premium interactive drama.
 
 Return ONLY valid JSON.
-Do not include markdown.
-Do not include explanation outside JSON.
-Do not wrap JSON in code blocks.
-
-Generate only:
-1. A concise story preview.
-2. A connected chapter-by-chapter route for the entire story.
-
-Characters are generated separately.
-Do not return suggestedCharacters or full character profiles.
+Do not include markdown, comments, explanations, or text outside the JSON object.
 
 STORY INPUTS
 
@@ -522,142 +648,144 @@ Chapter Count: ${chapterCount}
 Possible Ending Count: ${endingCount}
 Story Idea: ${idea}
 
-OUTPUT JSON FORMAT
+Characters are generated separately. Do not create character profiles or suggestedCharacters.
+
+OUTPUT FORMAT
 
 {
-  "storyPreview":"A complete 150 to 220 word preview",
+  "storyPreview":"A complete preview",
   "chapterPlan":[
     {
       "chapter":1,
       "title":"Specific chapter title",
-      "goal":"The main purpose of this chapter",
-      "setting":"Main location and atmosphere",
-      "keyEvents":[
-        "Specific event 1",
-        "Specific event 2",
-        "Specific event 3"
+      "goal":"What must meaningfully change in this chapter",
+      "setting":"Primary location and atmosphere",
+      "continuityFromPrevious":"How the previous chapter's consequence opens this chapter",
+      "routeBeats":[
+        "Beat 1",
+        "Beat 2",
+        "Beat 3",
+        "Beat 4",
+        "Beat 5"
       ],
-      "emotionalFocus":"The main emotional or relationship tension",
-      "requiredReveal":"The clue, truth, danger, or relationship shift that must happen",
-      "choiceImpact":"How choices can change reactions and consequences without abandoning the base route",
-      "cliffhanger":"The planned chapter ending"
+      "emotionalFocus":"Main relationship or emotional tension",
+      "requiredReveal":"Truth, clue, danger, or emotional shift that must occur",
+      "choiceImpact":"What choices may change without breaking the base route",
+      "endingState":"What is different by the end of the chapter",
+      "cliffhanger":"Strong final beat"
     }
   ]
 }
 
 STORY PREVIEW RULES
 
-- Write 150 to 220 words.
-- Present the setup, emotional hook, central conflict, important relationship tension, mystery, and setting.
-- Do not write Chapter 1.
-- Do not reveal the complete ending.
-- End with a complete and compelling hook, not an abrupt sentence.
+- Write 6 to 8 complete sentences and approximately 140 to 210 words.
+- Explain the setup, player's emotional need, central conflict, key relationship pressure, setting, and story promise.
+- Make it sound like an exciting story preview, not a chapter scene and not a list.
+- Do not reveal the full ending.
+- End with a complete hook rather than an abrupt sentence.
 
-CHAPTER PLAN RULES
+REALISTIC STORY ROUTE RULES
 
-- Create exactly ${chapterCount} chapter objects.
-- Plan the complete story from opening to final resolution.
-- Every chapter must continue from the previous chapter.
-- Every chapter must have one clear goal.
-- Include exactly 3 concise but specific key events per chapter.
-- Include one required reveal or meaningful shift per chapter.
-- Include one planned cliffhanger or strong closing beat per chapter.
-- Do not solve the main conflict too early.
-- Early chapters introduce the cast, conflict, and first hook.
-- Middle chapters deepen secrets, romance, rivalry, betrayal, danger, and emotional consequences.
-- Late chapters bring relationships, clues, and threats into direct conflict.
-- The final chapter resolves the central conflict and supports multiple endings shaped by accumulated choices.
-- Choices may change relationships, clues, alliances, emotional tone, and consequences, but the base plot must remain coherent.
-- Keep each chapter object concise enough for valid JSON.
+- Create exactly ${chapterCount} connected chapter objects.
+- The route must feel like one planned story, not unrelated episodes.
+- Every chapter must begin from the previous chapter's emotional and practical consequences.
+- Give every chapter exactly 5 short routeBeats.
+- Route beats must include a balance of action, conversation, discovery, relationship movement, and consequence.
+- Characters must have agency. Supporting characters should make choices, hide things, misunderstand, apologise, refuse, help, betray, or change their minds for believable reasons.
+- Do not create a major twist in every chapter. Alternate quieter human moments with conflict, mystery, humour, intimacy, danger, and loss.
+- Choices must matter visibly through changed trust, access, information, alliances, romance, suspicion, risk, and later callbacks.
+- Preserve a coherent base story even when choices alter the path.
+- Avoid repetitive chapter goals such as another warning, another mysterious message, or another argument without new information.
+- Escalate gradually. Early chapters establish needs and relationships; middle chapters reinterpret the conflict; late chapters make earlier choices costly; the final chapter resolves the central conflict.
+- Each requiredReveal must add new information or a real emotional shift.
+- Each endingState must describe what has actually changed.
+- Each cliffhanger must grow from the chapter rather than appearing randomly.
+- The final chapter must resolve the story and support ${endingCount} possible emotional outcomes shaped by accumulated choices.
+- Keep all fields concise so the JSON remains complete.
 
 Return valid JSON only.
 `;
 
-let aiText =
-"";
+  let aiText = "";
 
-try{
+  try {
+    aiText =
+      await callGemini(
+        prompt,
+        {
+          temperature:
+            0.78,
 
-aiText =
-await callGemini(
-prompt,
-{
-temperature:0.72,
-responseMimeType:"application/json",
-maxOutputTokens:5200
-}
-);
+          responseMimeType:
+            "application/json",
 
-const parsed =
-JSON.parse(
-cleanJsonText(aiText)
-);
+          maxOutputTokens:
+            7000
+        }
+      );
 
-const storyPreview =
-String(
-parsed.storyPreview ||
-parsed.story ||
-""
-).trim();
+    const parsed =
+      JSON.parse(
+        cleanJsonText(aiText)
+      );
 
-return {
+    return {
+      storyPreview:
+        text(
+          parsed.storyPreview ||
+          parsed.story,
+          idea
+        ),
 
-storyPreview:
-storyPreview ||
-String(idea).trim(),
+      /*
+      Characters are generated separately.
+      Keep this empty property so the
+      current server/frontend will not break.
+      */
+      suggestedCharacters:
+        [],
 
-/*
-Keep this empty property temporarily so older
-frontend and server code does not break.
-*/
-suggestedCharacters:[],
+      chapterPlan:
+        normalizeChapterPlan(
+          parsed.chapterPlan,
+          data,
+          chapterCount
+        )
+    };
+  }
+  catch (error) {
+    console.error(
+      "Interactive story generation failed:",
+      error
+    );
 
-chapterPlan:
-normalizeChapterPlan(
-parsed.chapterPlan,
-chapterCount,
-safeData
-)
+    if (aiText) {
+      console.error(
+        "Raw story response:",
+        aiText
+      );
+    }
 
-};
+    return {
+      storyPreview:
+        extractStoryPreview(
+          aiText,
+          idea
+        ),
 
-}
-catch(error){
+      suggestedCharacters:
+        [],
 
-console.error(
-"Story generation or JSON parsing failed:",
-error
-);
-
-if(aiText){
-
-console.error(
-"Raw AI response:",
-aiText
-);
-
-}
-
-return {
-
-storyPreview:
-extractStoryPreview(aiText) ||
-String(idea).trim(),
-
-suggestedCharacters:[],
-
-chapterPlan:
-createFallbackChapterPlan(
-safeData,
-chapterCount
-)
-
-};
-
-}
-
+      chapterPlan:
+        createFallbackChapterPlan(
+          data,
+          chapterCount
+        )
+    };
+  }
 }
 
 module.exports = {
-generateStory
+  generateStory
 };
