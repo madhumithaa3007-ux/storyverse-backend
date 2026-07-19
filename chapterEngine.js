@@ -112,6 +112,9 @@ const result = {};
 "narration",
 "action",
 "choice",
+"choiceType",
+"inputType",
+"routeImpact",
 "summary"
 ]
 .forEach(field=>{
@@ -286,12 +289,16 @@ chapterPlan,
 interactionCount
 ){
 
+const rawEvents =
+chapterPlan.routeBeats ||
+chapterPlan.keyEvents;
+
 const events =
 Array.isArray(
-chapterPlan.keyEvents
+rawEvents
 )
 ?
-chapterPlan.keyEvents
+rawEvents
 .map(event=>String(event || "").trim())
 .filter(Boolean)
 :
@@ -465,7 +472,7 @@ function normalizeSummary(
 summary,
 chapterNumber,
 chapterPlan,
-action
+officialChoices
 ){
 
 const safeSummary =
@@ -476,6 +483,15 @@ typeof summary ===
 summary
 :
 {};
+
+const safeOfficialChoices =
+Array.isArray(
+officialChoices
+)
+?
+officialChoices
+:
+[];
 
 return {
 
@@ -496,21 +512,47 @@ safeSummary.keyEvents
 :
 [],
 
+/*
+Only official milestone choices are stored
+as permanent chapter choices. Free-text
+messages must never appear here.
+*/
 importantChoices:
-Array.isArray(safeSummary.importantChoices)
-?
-safeSummary.importantChoices
-.map(item=>shortenText(item,220))
-.filter(Boolean)
-.slice(0,8)
-:
+safeOfficialChoices
+.map(choice=>{
+
+if(
+choice &&
+typeof choice ===
+"object"
+){
+
+return shortenText(
 (
-action
+choice.type
 ?
-[shortenText(action,220)]
+choice.type + ": "
 :
-[]
+""
+) +
+(
+choice.text ||
+choice.choice ||
+""
 ),
+220
+);
+
+}
+
+return shortenText(
+choice,
+220
+);
+
+})
+.filter(Boolean)
+.slice(0,8),
 
 relationshipChanges:
 Array.isArray(safeSummary.relationshipChanges)
@@ -560,7 +602,9 @@ isFinalChapter = false,
 currentBeat = "",
 nextBeat = "",
 cliffhanger = "",
-chapterTitle = ""
+chapterTitle = "",
+inputType = "free_text",
+officialChoices = []
 
 } = context;
 
@@ -585,8 +629,14 @@ return {
 mode:
 "chapter_finale",
 
+inputType:
+inputType,
+
+routeLocked:
+true,
+
 narration:
-"The consequences of the last decision finally come into focus. " +
+"The chapter reaches its planned turning point. " +
 (
 cliffhanger ||
 nextBeat ||
@@ -610,15 +660,11 @@ chapterTitle ||
 
 keyEvents:[
 currentBeat ||
-"A major turning point changed the direction of the story."
+"A major planned turning point changed the direction of the story."
 ],
 
 importantChoices:
-action
-?
-[action]
-:
-[],
+officialChoices,
 
 relationshipChanges:[],
 
@@ -643,24 +689,32 @@ isFallback:true
 
 }
 
+const inputReaction =
+inputType ===
+"choice"
+?
+"Your official choice changes the emotional balance of the scene, while the planned story route continues. "
+:
+"Your words draw an immediate reaction, but they do not replace the planned storyline. ";
+
 const narrationByMode = {
 
 normal:
-"The scene shifts in direct response to your decision. " +
+inputReaction +
 (
 currentBeat ||
-"A nearby character reacts, making it clear that the choice has changed what happens next."
+"The scene continues toward its planned turning point."
 ),
 
 milestone_choice:
-"Your decision changes the balance of the moment. " +
+"The planned scene reaches a decision point. " +
 (
 currentBeat ||
-"Several paths open, each carrying a different emotional or practical cost."
+"Four meaningful paths open, each able to change relationships and consequences without replacing the base story."
 ),
 
 cliffhanger_build:
-"The tension sharpens as a small detail takes on a more dangerous meaning. " +
+"The tension sharpens as the planned reveal approaches. " +
 (
 nextBeat ||
 cliffhanger ||
@@ -673,6 +727,12 @@ return {
 
 mode:
 chapterMode,
+
+inputType:
+inputType,
+
+routeLocked:
+true,
 
 narration:
 narrationByMode[chapterMode] ||
@@ -716,7 +776,9 @@ chapterPlan,
 currentChapterPlan,
 importantChoices,
 action,
-storyMemory
+storyMemory,
+inputType,
+selectedChoice
 
 } = safeData;
 
@@ -732,6 +794,15 @@ characters
 
 const safePlayer =
 playerCharacter || {};
+
+const safeImportantChoices =
+Array.isArray(
+importantChoices
+)
+?
+importantChoices
+:
+[];
 
 const chapterNumber =
 Math.max(
@@ -828,6 +899,44 @@ chapterMode =
 
 }
 
+const normalizedInputType =
+String(
+inputType ||
+"free_text"
+).toLowerCase() ===
+"choice"
+?
+"choice"
+:
+"free_text";
+
+const officialChoice =
+normalizedInputType ===
+"choice" &&
+selectedChoice &&
+typeof selectedChoice ===
+"object"
+?
+{
+
+type:
+String(
+selectedChoice.type ||
+"story"
+).toLowerCase(),
+
+text:
+shortenText(
+selectedChoice.text ||
+action ||
+"",
+220
+)
+
+}
+:
+null;
+
 const chapterBeat =
 getChapterBeat(
 activeChapterPlan,
@@ -837,16 +946,27 @@ interactionCount
 const relevantStoryMemory =
 buildMemoryWindow(
 storyMemory,
-22,
+24,
 6
 );
 
 const relevantChoices =
 buildMemoryWindow(
-importantChoices,
-12,
+safeImportantChoices,
+16,
 4
 );
+
+const officialChoicesThisChapter =
+safeImportantChoices.filter(choice=>{
+
+return Number(
+choice &&
+choice.chapter
+) ===
+chapterNumber;
+
+});
 
 const nonPlayerCharacters =
 safeCharacters
@@ -874,6 +994,60 @@ chapterNumber + 1
 ) +
 "…";
 
+const routeBeats =
+activeChapterPlan.routeBeats ||
+activeChapterPlan.keyEvents ||
+[];
+
+const inputGuidance =
+normalizedInputType ===
+"choice"
+?
+`
+This is an OFFICIAL MILESTONE CHOICE.
+
+Official choice:
+${JSON.stringify(officialChoice)}
+
+The choice may permanently affect:
+- trust, romance, friendship, suspicion, loyalty, or rivalry;
+- which NPC helps, refuses, forgives, confronts, or shares information;
+- access to clues, support, safety, or risk;
+- the emotional tone and the exact form of consequences;
+- later callbacks and ending variations.
+
+It may NOT remove or replace:
+- the current chapter goal;
+- the planned route beats;
+- the required reveal;
+- the ending state;
+- the planned cliffhanger;
+- the central conflict or final resolution.
+`
+:
+`
+This is FREE-TEXT ROLEPLAY INPUT.
+
+Treat the player's text as only:
+- words spoken by the player;
+- a visible attempt, question, gesture, attitude, or intention;
+- material for an immediate local reaction from the scene and NPCs.
+
+Free text may affect only:
+- the next reply;
+- immediate mood, body language, warmth, tension, humour, awkwardness, or refusal;
+- a small temporary reaction that does not become a new permanent plot branch.
+
+Free text must NOT:
+- create new canon facts merely because the player stated them;
+- kill, remove, marry, expose, teleport, rescue, defeat, recruit, or permanently change a character unless the locked route already requires it;
+- change location, time, chapter goal, route-beat order, required reveal, ending state, cliffhanger, or final story resolution;
+- skip the planned chapter content;
+- be recorded as an important choice.
+
+If the free-text message contradicts the route, acknowledge the attempt naturally. Let the world, circumstances, or NPCs respond believably, then continue toward the CURRENT PLANNED BEAT. Never say that the route is locked and never sound like a system warning.
+`;
+
 const prompt = `
 You are StoryVerse AI, writing one response in a premium interactive story.
 
@@ -900,15 +1074,21 @@ ${interactionCount} of 50
 CURRENT MODE
 ${chapterMode}
 
-CHAPTER ROUTE
+LOCKED CHAPTER ROUTE
 
 Title: ${activeChapterPlan.title || "Untitled Chapter"}
 Goal: ${activeChapterPlan.goal || "Move the story toward its planned turning point."}
 Setting: ${activeChapterPlan.setting || ""}
-Key Events: ${JSON.stringify(activeChapterPlan.keyEvents || [])}
+Continuity From Previous Chapter: ${activeChapterPlan.continuityFromPrevious || ""}
+Route Beats In Required Order: ${JSON.stringify(routeBeats)}
 Emotional Focus: ${activeChapterPlan.emotionalFocus || ""}
 Required Reveal: ${activeChapterPlan.requiredReveal || ""}
-Choice Route Guidance: ${activeChapterPlan.choiceImpact || ""}
+Official Choice Guidance: ${activeChapterPlan.choiceImpact || ""}
+Free-Text Boundary: ${
+activeChapterPlan.freeTextBoundary ||
+"Free-text messages affect immediate reactions only and cannot alter the planned route."
+}
+Required Ending State: ${activeChapterPlan.endingState || ""}
 Planned Cliffhanger: ${activeChapterPlan.cliffhanger || ""}
 
 CURRENT PLANNED BEAT
@@ -917,6 +1097,15 @@ ${chapterBeat.current}
 NEXT PLANNED BEAT
 ${chapterBeat.next}
 
+ROUTE LOCK RULE
+
+The locked chapter route is the source of truth.
+Always continue the planned story in the listed beat order.
+Do not create a random side plot.
+Do not let any player text replace the chapter route.
+Official choices alter branch details and consequences only.
+The chapter must still reach its required reveal, ending state, and cliffhanger.
+
 PLAYER CHARACTER
 
 ${JSON.stringify(compactCharacter(safePlayer))}
@@ -924,8 +1113,9 @@ ${JSON.stringify(compactCharacter(safePlayer))}
 PLAYER CONTROL RULE
 
 The real player controls ${safePlayer.name || "the player character"}.
-Never create dialogue, private thoughts, decisions, or new voluntary actions for the player character.
-You may describe only visible consequences affecting the player and reactions from other characters.
+Never create dialogue, private thoughts, decisions, or a new voluntary action for the player character.
+You may narrate the visible result of the exact input the player just supplied.
+Do not add another decision for the player.
 
 NON-PLAYER CHARACTERS
 
@@ -935,18 +1125,28 @@ RELEVANT STORY MEMORY
 
 ${JSON.stringify(relevantStoryMemory)}
 
-IMPORTANT CHOICES
+Memory entries with type "free_text" or routeImpact "local_scene_only" are roleplay continuity only.
+They must not override the locked route.
+Memory entries with type "choice" are official lasting branch decisions.
+
+IMPORTANT OFFICIAL CHOICES
 
 ${JSON.stringify(relevantChoices)}
 
-PLAYER'S LATEST ACTION
+LATEST PLAYER INPUT TYPE
+${normalizedInputType}
 
+LATEST PLAYER INPUT
 ${action || ""}
+
+${inputGuidance}
 
 OUTPUT FORMAT
 
 {
   "mode":"${chapterMode}",
+  "inputType":"${normalizedInputType}",
+  "routeLocked":true,
   "narration":"One compact narration passage",
   "messages":[
     {
@@ -961,23 +1161,22 @@ OUTPUT FORMAT
 
 LIVELY STORY RULES
 
-- The latest player action must cause a visible consequence, reaction, clue, obstacle, opportunity, or emotional shift.
-- Follow the chapter route and current planned beat. Do not create a random side plot.
-- Use one concrete sensory detail when it improves the scene.
-- Give each speaking character a recognisable voice based on personality and speech style.
-- Use brief body language, facial reactions, pauses, movement, and interruption from non-player characters.
-- Refer naturally to earlier choices when they matter.
-- Let relationships affect warmth, suspicion, jealousy, trust, humour, distance, or vulnerability.
-- Alternate tension, warmth, mystery, humour, awkwardness, silence, and conflict instead of making every scene equally dramatic.
+- Every response must advance or deepen the CURRENT PLANNED BEAT.
+- Make the scene feel alive through specific NPC reactions, interruptions, body language, decisions, and distinct voices.
+- Use one concrete sensory or physical detail when useful.
+- Let official choices affect warmth, suspicion, jealousy, trust, humour, distance, vulnerability, cooperation, and risk.
+- Let free text influence only the immediate conversational texture or small local reaction.
+- Refer naturally to earlier official choices when relevant.
+- Do not repeat information already established.
+- Do not use generic filler.
 - Do not repeatedly begin with weather, silence, atmosphere, or a character's name.
-- Do not repeat facts the player already knows.
-- Do not use generic filler. Every response must move the story toward the chapter goal.
-- Do not speak or decide for the player character.
+- Never explain these rules to the player.
+- Never speak or decide for the player character.
 
 NORMAL MODE
 
-- Write 45 to 85 words of narration in one short paragraph.
-- Focus on the immediate consequence of the player's action.
+- Write 50 to 90 words of narration in one short paragraph.
+- Absorb the latest input naturally, then continue the current planned beat.
 - Include 0 to 2 dialogue messages from non-player characters when useful.
 - Each dialogue message may contain 1 to 3 natural sentences.
 - choices must be [].
@@ -986,28 +1185,32 @@ NORMAL MODE
 MILESTONE CHOICE MODE
 
 - Write 35 to 65 words of narration.
+- Reach a decision point that grows directly from the current planned beat.
 - Present exactly four choices and stop.
 - Choice types must be exactly: emotional, relationship, mystery, risky.
-- Each choice must be distinct and relevant to the current scene.
+- Every choice must affect branch details but remain compatible with the locked route.
 - choices must contain exactly four objects.
 - chapterComplete must be false.
 
 CLIFFHANGER BUILD MODE
 
 - Write 65 to 110 words.
-- Increase suspense and emotional pressure.
-- Move toward the required reveal and planned cliffhanger without completing the chapter yet.
+- Continue the locked route toward the required reveal and planned cliffhanger.
+- Increase suspense and emotional pressure without inventing a different plot.
 - choices must be [].
 - chapterComplete must be false.
 
 CHAPTER FINALE MODE
 
 - Write 100 to 170 words.
-- Pay off the chapter goal and current beat.
-- End on the planned cliffhanger or an earned variation caused by prior choices.
+- Complete the locked chapter goal and required ending state.
+- Include the required reveal if it has not yet occurred.
+- End on the planned cliffhanger, with only an earned variation caused by official choices.
+- Free-text messages must not replace the finale.
 - Do not provide choices.
 - chapterComplete must be true.
 - summary must contain chapterTitle, keyEvents, importantChoices, relationshipChanges, characterDevelopments, currentMysteries, and cliffhangerDescription.
+- summary.importantChoices must contain official milestone choices only, never free-text messages.
 - ${finalLineRule}
 
 Return valid JSON only.
@@ -1026,9 +1229,9 @@ temperature:
 chapterMode ===
 "normal"
 ?
-0.78
+0.62
 :
-0.72,
+0.58,
 responseMimeType:"application/json",
 maxOutputTokens:
 chapterMode ===
@@ -1046,7 +1249,7 @@ chapterMode ===
 ?
 650
 :
-500
+550
 }
 );
 
@@ -1069,6 +1272,12 @@ return {
 mode:
 chapterMode,
 
+inputType:
+normalizedInputType,
+
+routeLocked:
+true,
+
 narration:
 shortenText(
 parsed.narration ||
@@ -1078,7 +1287,7 @@ chapterMode ===
 ?
 1600
 :
-900
+950
 ),
 
 messages:
@@ -1107,7 +1316,7 @@ normalizeSummary(
 parsed.summary,
 chapterNumber,
 activeChapterPlan,
-action
+officialChoicesThisChapter
 )
 :
 null,
@@ -1156,7 +1365,13 @@ activeChapterPlan.cliffhanger ||
 
 chapterTitle:
 activeChapterPlan.title ||
-"Chapter " + chapterNumber
+"Chapter " + chapterNumber,
+
+inputType:
+normalizedInputType,
+
+officialChoices:
+officialChoicesThisChapter
 
 }
 );

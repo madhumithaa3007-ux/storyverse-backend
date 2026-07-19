@@ -341,7 +341,10 @@ function createFallbackChapter(
       source.reveal,
 
     choiceImpact:
-      "Choices may change reactions, access to information, alliances, relationship warmth, risk, and the form of the consequence while preserving the chapter's main destination.",
+      "Official milestone choices may change reactions, access to information, alliances, relationship warmth, risk, and the form of the consequence while preserving the chapter's main destination.",
+
+    freeTextBoundary:
+      "Free-text player messages may affect only immediate dialogue, mood, body language, and small scene reactions. They must never replace route beats, required reveals, chapter goals, ending states, cliffhangers, or the planned final resolution.",
 
     endingState:
       phase === "finale"
@@ -488,6 +491,13 @@ function normalizeChapterPlan(
             source.choiceImpact,
             300,
             backup.choiceImpact
+          ),
+
+        freeTextBoundary:
+          shortText(
+            source.freeTextBoundary,
+            360,
+            backup.freeTextBoundary
           ),
 
         endingState:
@@ -670,7 +680,8 @@ OUTPUT FORMAT
       ],
       "emotionalFocus":"Main relationship or emotional tension",
       "requiredReveal":"Truth, clue, danger, or emotional shift that must occur",
-      "choiceImpact":"What choices may change without breaking the base route",
+      "choiceImpact":"What official choices may change without breaking the base route",
+      "freeTextBoundary":"What free-text player messages are not allowed to change",
       "endingState":"What is different by the end of the chapter",
       "cliffhanger":"Strong final beat"
     }
@@ -694,8 +705,10 @@ REALISTIC STORY ROUTE RULES
 - Route beats must include a balance of action, conversation, discovery, relationship movement, and consequence.
 - Characters must have agency. Supporting characters should make choices, hide things, misunderstand, apologise, refuse, help, betray, or change their minds for believable reasons.
 - Do not create a major twist in every chapter. Alternate quieter human moments with conflict, mystery, humour, intimacy, danger, and loss.
-- Choices must matter visibly through changed trust, access, information, alliances, romance, suspicion, risk, and later callbacks.
-- Preserve a coherent base story even when choices alter the path.
+- Only official milestone choices may create lasting branch effects such as changed trust, access, information, alliances, romance, suspicion, risk, and later callbacks.
+- Free-text player messages are roleplay input only. They may change immediate wording, tone, body language, or a brief local reaction, but they must not rewrite story facts, skip route beats, change the required reveal, replace the chapter goal, alter the ending state, or create a different cliffhanger.
+- If a free-text message contradicts the planned route, the story world must respond naturally and steer the scene back toward the current route beat without sounding robotic.
+- Preserve a coherent base story even when official choices alter branch details.
 - Avoid repetitive chapter goals such as another warning, another mysterious message, or another argument without new information.
 - Escalate gradually. Early chapters establish needs and relationships; middle chapters reinterpret the conflict; late chapters make earlier choices costly; the final chapter resolves the central conflict.
 - Each requiredReveal must add new information or a real emotional shift.
@@ -715,7 +728,7 @@ Return valid JSON only.
         prompt,
         {
           temperature:
-            0.78,
+            0.68,
 
           responseMimeType:
             "application/json",
