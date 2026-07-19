@@ -1,1445 +1,1112 @@
-const { callGemini } = require("./geminiClient");
+const { callGemini } =
+require("./geminiClient");
 
-function number(
-  value,
-  fallback = 0
-) {
-  const parsed =
-    Number(value);
 
-  return Number.isFinite(parsed)
-    ? parsed
-    : fallback;
+/*
+==================================================
+TEXT HELPERS
+==================================================
+*/
+
+function cleanText(
+value,
+maximumLength = 500
+){
+
+const text =
+String(
+value ?? ""
+)
+.trim();
+
+if(!text){
+
+return "";
+
 }
 
-function text(
-  value,
-  fallback = ""
-) {
-  const result =
-    String(value ?? "").trim();
+if(
+text.length <=
+maximumLength
+){
 
-  return result || fallback;
+return text;
+
 }
 
-function shorten(
-  value,
-  maximum = 260,
-  fallback = ""
-) {
-  const result =
-    text(value, fallback);
+return (
+text
+.slice(
+0,
+maximumLength
+)
+.trimEnd()
++
+"…"
+);
 
-  if (result.length <= maximum) {
-    return result;
-  }
-
-  return (
-    result
-      .slice(0, maximum)
-      .trimEnd() +
-    "…"
-  );
 }
 
-function cleanJsonText(value) {
-  let result =
-    String(value || "")
-      .replace(/```json/gi, "")
-      .replace(/```/g, "")
-      .trim();
 
-  const firstBrace =
-    result.indexOf("{");
+/*
+==================================================
+MEMORY COMPRESSION
+==================================================
+*/
 
-  const lastBrace =
-    result.lastIndexOf("}");
+function compactMemory(
+items,
+limit = 18
+){
 
-  if (
-    firstBrace !== -1 &&
-    lastBrace > firstBrace
-  ) {
-    result =
-      result.slice(
-        firstBrace,
-        lastBrace + 1
-      );
-  }
+if(
+!Array.isArray(
+items
+)
+){
 
-  return result;
+return [];
+
 }
 
-function normalizeRelationship(value) {
-  const source =
-    value &&
-    typeof value === "object"
-      ? value
-      : {};
+return items
+.slice(
+-limit
+)
+.map(item=>{
 
-  const score = (
-    item,
-    fallback
-  ) => {
-    return Math.max(
-      0,
-      Math.min(
-        100,
-        number(item, fallback)
-      )
-    );
-  };
+if(
+typeof item ===
+"string"
+){
 
-  return {
-    trust:
-      score(
-        source.trust,
-        50
-      ),
+return {
 
-    friendship:
-      score(
-        source.friendship,
-        50
-      ),
+type:
+"memory",
 
-    romance:
-      score(
-        source.romance,
-        0
-      ),
+text:
+cleanText(
+item,
+320
+)
 
-    suspicion:
-      score(
-        source.suspicion,
-        0
-      )
-  };
+};
+
 }
 
-function compactCharacter(character) {
-  const source =
-    character || {};
+if(
+!item ||
+typeof item !==
+"object"
+){
 
-  return {
-    name:
-      text(source.name),
+return null;
 
-    role:
-      text(source.role),
-
-    occupation:
-      text(source.occupation),
-
-    traits:
-      shorten(
-        source.traits,
-        150
-      ),
-
-    speechStyle:
-      text(
-        source.speechStyle
-      ),
-
-    relationshipStyle:
-      text(
-        source.relationshipStyle
-      ),
-
-    strengths:
-      shorten(
-        source.strengths,
-        120
-      ),
-
-    weaknesses:
-      shorten(
-        source.weaknesses,
-        120
-      ),
-
-    fears:
-      shorten(
-        source.fears,
-        110
-      ),
-
-    secretType:
-      text(
-        source.secretType
-      ),
-
-    profile:
-      shorten(
-        source.profile,
-        360
-      ),
-
-    relationship:
-      normalizeRelationship(
-        source.relationship
-      )
-  };
 }
 
-function compactMemoryEntry(entry) {
-  if (
-    typeof entry ===
-    "string"
-  ) {
-    return {
-      type:
-        "context",
+return {
 
-      text:
-        shorten(
-          entry,
-          260
-        )
-    };
-  }
+type:
+cleanText(
+item.type ||
+item.role ||
+"memory",
+40
+),
 
-  if (
-    !entry ||
-    typeof entry !== "object"
-  ) {
-    return null;
-  }
+speaker:
+cleanText(
+item.speaker ||
+item.character ||
+item.characterName ||
+"",
+80
+),
 
-  const result = {
-    type:
-      text(
-        entry.type ||
-        entry.mode ||
-        "context"
-      ),
+text:
+cleanText(
+item.text ||
+item.message ||
+item.narration ||
+item.summary ||
+"",
+360
+)
 
-    chapter:
-      entry.chapter ?? "",
+};
 
-    speaker:
-      shorten(
-        entry.speaker ||
-        entry.character ||
-        entry.characterName,
-        60
-      ),
+})
+.filter(item=>{
 
-    text:
-      shorten(
-        entry.text ||
-        entry.message ||
-        entry.narration ||
-        entry.choice ||
-        entry.action ||
-        entry.summary,
-        280
-      )
-  };
+return (
+item &&
+item.text
+);
 
-  if (!result.text) {
-    return null;
-  }
+});
 
-  return result;
 }
 
-function memoryWindow(
-  entries,
-  recentLimit = 24,
-  olderSamples = 6
-) {
-  const source =
-    Array.isArray(entries)
-      ? entries
-      : [];
 
-  const recent =
-    source.slice(
-      -recentLimit
-    );
+/*
+==================================================
+RELATIONSHIP NUMBER
+==================================================
+*/
 
-  const older =
-    source.slice(
-      0,
-      Math.max(
-        0,
-        source.length -
-        recentLimit
-      )
-    );
+function relationshipNumber(
+value,
+fallback
+){
 
-  const sampled = [];
+const number =
+Number(
+value
+);
 
-  if (older.length > 0) {
-    const count =
-      Math.min(
-        olderSamples,
-        older.length
-      );
+return Number.isFinite(
+number
+)
+?
+number
+:
+fallback;
 
-    for (
-      let index = 0;
-      index < count;
-      index++
-    ) {
-      const sourceIndex =
-        Math.floor(
-          (
-            index *
-            (
-              older.length - 1
-            )
-          ) /
-          Math.max(
-            1,
-            count - 1
-          )
-        );
-
-      sampled.push(
-        older[sourceIndex]
-      );
-    }
-  }
-
-  return [
-    ...sampled,
-    ...recent
-  ]
-    .map(
-      compactMemoryEntry
-    )
-    .filter(Boolean);
 }
 
-function routeBeats(plan) {
-  const source =
-    Array.isArray(
-      plan.routeBeats
-    )
-      ? plan.routeBeats
-      : Array.isArray(
-          plan.keyEvents
-        )
-        ? plan.keyEvents
-        : [];
 
-  return source
-    .map(item => {
-      return text(item);
-    })
-    .filter(Boolean)
-    .slice(0, 5);
+/*
+==================================================
+OFFLINE / API FAILURE FALLBACK REPLY
+==================================================
+*/
+
+function buildFallbackReply({
+
+character,
+
+user,
+
+message,
+
+scene,
+
+relationship
+
+}){
+
+const characterName =
+cleanText(
+character.name,
+80
+) ||
+"I";
+
+const userName =
+cleanText(
+user.name ||
+user.displayName,
+80
+);
+
+const latestMessage =
+cleanText(
+message,
+180
+);
+
+const activeScene =
+cleanText(
+scene,
+220
+);
+
+const trust =
+relationshipNumber(
+relationship.trust,
+50
+);
+
+const romance =
+relationshipNumber(
+relationship.romance,
+0
+);
+
+const suspicion =
+relationshipNumber(
+relationship.suspicion,
+0
+);
+
+let opening;
+
+if(
+suspicion >= 65
+){
+
+opening =
+"I heard you, but I am not ready to accept that without questions.";
+
+}
+else if(
+romance >= 60
+){
+
+opening =
+"I am trying to stay calm, but what you said matters to me more than I want to admit.";
+
+}
+else if(
+trust >= 65
+){
+
+opening =
+"I believe you are being honest with me, so I am listening.";
+
+}
+else{
+
+opening =
+"I heard what you said, and I need a moment to understand what you really mean.";
+
 }
 
-function getBeat(
-  plan,
-  interactionCount
-) {
-  const beats =
-    routeBeats(plan);
+const sceneLine =
+activeScene
+?
+"In this moment, I do not want us to avoid what is happening between us."
+:
+"I do not want to give you an empty answer just to end the conversation.";
 
-  if (beats.length === 0) {
-    return {
-      index:
-        0,
+const closing =
+latestMessage
+?
+(
+userName
+?
+userName + ", "
+:
+""
+)
++
+"say it plainly—what do you need from " +
+characterName +
+" right now?"
+:
+"Tell me what you are really trying to say.";
 
-      current:
-        text(
-          plan.goal,
-          "Move the chapter toward a meaningful consequence."
-        ),
+return (
+opening +
+" " +
+sceneLine +
+" " +
+closing
+);
 
-      next:
-        text(
-          plan.requiredReveal ||
-          plan.cliffhanger,
-          "Change the situation in a believable way."
-        )
-    };
-  }
-
-  /*
-  Each route beat roughly controls
-  ten interactions.
-  */
-  const ranges = [
-    0,
-    10,
-    20,
-    30,
-    40
-  ];
-
-  let index =
-    ranges.reduce(
-      (
-        result,
-        start,
-        currentIndex
-      ) => {
-        return (
-          interactionCount >= start
-            ? currentIndex
-            : result
-        );
-      },
-      0
-    );
-
-  index =
-    Math.min(
-      index,
-      beats.length - 1
-    );
-
-  return {
-    index:
-      index,
-
-    current:
-      beats[index],
-
-    next:
-      beats[
-        Math.min(
-          index + 1,
-          beats.length - 1
-        )
-      ]
-  };
 }
 
-function getMode(
-  interactionCount,
-  milestones
-) {
-  if (
-    interactionCount >= 50
-  ) {
-    return "chapter_finale";
-  }
 
-  if (
-    interactionCount >= 46
-  ) {
-    return "cliffhanger_build";
-  }
+/*
+==================================================
+PROMPT BUILDER
+==================================================
+*/
 
-  if (
-    milestones.includes(
-      interactionCount
-    )
-  ) {
-    return "milestone_choice";
-  }
+function buildPrompt({
 
-  return "normal";
+story,
+
+user,
+
+playerCharacter,
+
+currentChapter,
+
+scene,
+
+storyMemory,
+
+chatHistory,
+
+character,
+
+message,
+
+relationship,
+
+compact = false
+
+}){
+
+const sceneActive =
+Boolean(
+scene
+);
+
+const storyContext =
+compact
+?
+(
+cleanText(
+story.title,
+100
+)
++
+" | " +
+cleanText(
+story.genre,
+60
+)
+)
+:
+JSON.stringify({
+
+title:
+cleanText(
+story.title,
+100
+),
+
+genre:
+cleanText(
+story.genre,
+60
+),
+
+summary:
+cleanText(
+story.story ||
+story.summary ||
+story.fullStory,
+1000
+),
+
+currentChapter:
+currentChapter ||
+1
+
+});
+
+const characterContext =
+JSON.stringify({
+
+name:
+cleanText(
+character.name,
+80
+),
+
+age:
+cleanText(
+character.age,
+30
+),
+
+role:
+cleanText(
+character.role,
+100
+),
+
+occupation:
+cleanText(
+character.occupation,
+100
+),
+
+traits:
+cleanText(
+character.traits,
+240
+),
+
+speechStyle:
+cleanText(
+character.speechStyle,
+120
+),
+
+relationshipStyle:
+cleanText(
+character.relationshipStyle,
+120
+),
+
+strengths:
+cleanText(
+character.strengths,
+180
+),
+
+weaknesses:
+cleanText(
+character.weaknesses,
+180
+),
+
+likes:
+cleanText(
+character.likes,
+180
+),
+
+dislikes:
+cleanText(
+character.dislikes,
+180
+),
+
+hobbies:
+cleanText(
+character.hobbies,
+180
+),
+
+fears:
+cleanText(
+character.fears,
+160
+),
+
+profile:
+cleanText(
+character.profile,
+compact
+?
+420
+:
+700
+),
+
+rules:
+cleanText(
+character.rules,
+320
+),
+
+secretType:
+cleanText(
+character.secretType,
+100
+)
+
+});
+
+const userContext =
+JSON.stringify({
+
+name:
+cleanText(
+user.name ||
+user.displayName,
+80
+)
+||
+"User",
+
+role:
+cleanText(
+user.role,
+100
+)
+||
+"Player",
+
+occupation:
+cleanText(
+user.occupation,
+100
+),
+
+traits:
+cleanText(
+user.traits ||
+user.personality,
+220
+),
+
+speechStyle:
+cleanText(
+user.speechStyle,
+120
+),
+
+relationshipStyle:
+cleanText(
+user.relationshipStyle,
+120
+),
+
+likes:
+cleanText(
+user.likes,
+160
+),
+
+dislikes:
+cleanText(
+user.dislikes,
+160
+),
+
+fears:
+cleanText(
+user.fears,
+140
+),
+
+profile:
+cleanText(
+user.profile ||
+user.bio,
+500
+),
+
+rules:
+cleanText(
+user.rules,
+240
+)
+
+});
+
+const playerContext =
+JSON.stringify({
+
+name:
+cleanText(
+playerCharacter.name,
+80
+),
+
+role:
+cleanText(
+playerCharacter.role,
+100
+),
+
+profile:
+cleanText(
+playerCharacter.profile,
+350
+)
+
+});
+
+return `
+
+You are roleplaying as one fictional StoryVerse character.
+
+Return only the character's reply as plain text.
+
+Do not return JSON.
+Do not return markdown.
+Do not include headings.
+Do not include explanations.
+Do not place quotation marks around the entire reply.
+Never say you are an AI.
+
+IMPORTANT USER PERSONA RULE
+
+The person chatting is the USER PERSONA.
+
+Do not automatically treat the user as the story main character.
+
+The story main character is background context unless the user persona is the same person.
+
+CONVERSATION MODE
+
+${
+sceneActive
+?
+"CUSTOM SCENE CHAT"
+:
+"NORMAL STORY CHAT"
 }
 
-function realisticChoiceFallbacks() {
-  return [
-    {
-      type:
-        "emotional",
+ACTIVE SCENE
 
-      text:
-        "Say what this moment is truly making you feel."
-    },
-
-    {
-      type:
-        "relationship",
-
-      text:
-        "Turn to the person whose trust matters most right now."
-    },
-
-    {
-      type:
-        "mystery",
-
-      text:
-        "Focus on the detail that does not fit the explanation."
-    },
-
-    {
-      type:
-        "risky",
-
-      text:
-        "Act before anyone else can stop or prepare for it."
-    }
-  ];
+${
+sceneActive
+?
+cleanText(
+scene,
+500
+)
+:
+"No custom scene is active."
 }
 
-function normalizeChoices(value) {
-  const source =
-    Array.isArray(value)
-      ? value
-      : [];
+SCENE RULES
 
-  const fallback =
-    realisticChoiceFallbacks();
+- When a custom scene is active, remain completely inside that scene.
+- Use the scene-specific chat history as the primary memory.
+- Preserve the scene's emotional state, conflict, closeness, tension and unresolved details.
+- Do not continue the normal chapter timeline while scene mode is active.
+- Never call the scene temporary, fake, imagined, alternate or non-canon.
+- Never explain that the scene is separate from the original story.
+- When no scene is active, continue naturally from the story and normal chat history.
 
-  const types = [
-    "emotional",
-    "relationship",
-    "mystery",
-    "risky"
-  ];
+STORY CONTEXT
 
-  return types.map(
-    (
-      type,
-      index
-    ) => {
-      const matchingChoice =
-        source.find(choice => {
-          return (
-            text(
-              choice &&
-              choice.type
-            ).toLowerCase() ===
-            type
-          );
-        });
+${storyContext}
 
-      return {
-        type:
-          type,
+STORY MAIN CHARACTER BACKGROUND
 
-        text:
-          shorten(
-            matchingChoice &&
-            matchingChoice.text,
-            155,
-            fallback[index].text
-          )
-      };
-    }
-  );
+${playerContext}
+
+USER PERSONA
+
+${userContext}
+
+CHARACTER YOU ARE PLAYING
+
+${characterContext}
+
+RELATIONSHIP STATE
+
+Trust:
+${
+relationshipNumber(
+relationship.trust,
+50
+)
 }
 
-function normalizeMessages(
-  value,
-  playerName,
-  allowedNames
-) {
-  const source =
-    Array.isArray(value)
-      ? value
-      : [];
-
-  const allowed =
-    new Set(
-      allowedNames.map(name => {
-        return text(
-          name
-        ).toLowerCase();
-      })
-    );
-
-  const player =
-    text(
-      playerName
-    ).toLowerCase();
-
-  return source
-    .filter(message => {
-      const name =
-        text(
-          message &&
-          message.character
-        ).toLowerCase();
-
-      return (
-        name &&
-        name !== player &&
-        allowed.has(name) &&
-        text(
-          message &&
-          message.text
-        )
-      );
-    })
-    .slice(0, 3)
-    .map(message => {
-      return {
-        character:
-          text(
-            message.character
-          ),
-
-        text:
-          shorten(
-            message.text,
-            420
-          )
-      };
-    });
+Friendship:
+${
+relationshipNumber(
+relationship.friendship,
+50
+)
 }
 
-function normalizeRelationshipChanges(
-  value
-) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter(item => {
-      return (
-        item &&
-        typeof item ===
-        "object"
-      );
-    })
-    .slice(0, 8)
-    .map(item => {
-      return {
-        character:
-          shorten(
-            item.character ||
-            item.name,
-            70
-          ),
-
-        trust:
-          Math.max(
-            -10,
-            Math.min(
-              10,
-              number(
-                item.trust,
-                0
-              )
-            )
-          ),
-
-        friendship:
-          Math.max(
-            -10,
-            Math.min(
-              10,
-              number(
-                item.friendship,
-                0
-              )
-            )
-          ),
-
-        romance:
-          Math.max(
-            -10,
-            Math.min(
-              10,
-              number(
-                item.romance,
-                0
-              )
-            )
-          ),
-
-        suspicion:
-          Math.max(
-            -10,
-            Math.min(
-              10,
-              number(
-                item.suspicion,
-                0
-              )
-            )
-          ),
-
-        reason:
-          shorten(
-            item.reason,
-            180
-          )
-      };
-    });
+Romance:
+${
+relationshipNumber(
+relationship.romance,
+0
+)
 }
 
-function normalizeSummary(
-  summary,
-  chapterNumber,
-  plan,
-  latestAction
-) {
-  const source =
-    summary &&
-    typeof summary ===
-    "object"
-      ? summary
-      : {};
-
-  const list = (
-    value,
-    maximum,
-    length
-  ) => {
-    return Array.isArray(value)
-      ? value
-          .map(item => {
-            return shorten(
-              item,
-              length
-            );
-          })
-          .filter(Boolean)
-          .slice(
-            0,
-            maximum
-          )
-      : [];
-  };
-
-  const generatedChoices =
-    list(
-      source.importantChoices,
-      8,
-      220
-    );
-
-  return {
-    chapterTitle:
-      shorten(
-        source.chapterTitle,
-        120,
-        text(
-          plan.title,
-          `Chapter ${chapterNumber}`
-        )
-      ),
-
-    keyEvents:
-      list(
-        source.keyEvents,
-        8,
-        240
-      ),
-
-    importantChoices:
-      generatedChoices.length > 0
-        ? generatedChoices
-        : latestAction
-          ? [
-              shorten(
-                latestAction,
-                220
-              )
-            ]
-          : [],
-
-    relationshipChanges:
-      normalizeRelationshipChanges(
-        source.relationshipChanges
-      ),
-
-    characterDevelopments:
-      list(
-        source.characterDevelopments,
-        8,
-        220
-      ),
-
-    currentMysteries:
-      list(
-        source.currentMysteries,
-        8,
-        220
-      ),
-
-    cliffhangerDescription:
-      shorten(
-        source.cliffhangerDescription,
-        280,
-        text(
-          plan.cliffhanger
-        )
-      )
-  };
+Suspicion:
+${
+relationshipNumber(
+relationship.suspicion,
+0
+)
 }
 
-function fallbackResponse(
-  mode,
-  context
-) {
-  const {
-    chapterNumber,
-    finalChapter,
-    currentBeat,
-    nextBeat,
-    cliffhanger,
-    chapterTitle,
-    action,
-    firstNpc
-  } = context;
+RECENT STORY MEMORY
 
-  if (
-    mode ===
-    "chapter_finale"
-  ) {
-    const finalLine =
-      finalChapter
-        ? "The End."
-        : `To be continued in Chapter ${chapterNumber + 1}…`;
-
-    return {
-      mode:
-        mode,
-
-      narration:
-        `The consequences of the last decision settle over the scene. ${shorten(
-          cliffhanger ||
-          nextBeat ||
-          currentBeat,
-          340,
-          "A truth comes to light, changing what everyone must do next."
-        )}\n\n${finalLine}`,
-
-      messages:
-        [],
-
-      choices:
-        [],
-
-      chapterComplete:
-        true,
-
-      summary: {
-        chapterTitle:
-          chapterTitle ||
-          `Chapter ${chapterNumber}`,
-
-        keyEvents: [
-          currentBeat ||
-          "The chapter reached a turning point."
-        ],
-
-        importantChoices:
-          action
-            ? [
-                shorten(
-                  action,
-                  220
-                )
-              ]
-            : [],
-
-        relationshipChanges:
-          [],
-
-        characterDevelopments:
-          [],
-
-        currentMysteries:
-          cliffhanger
-            ? [
-                cliffhanger
-              ]
-            : [],
-
-        cliffhangerDescription:
-          cliffhanger ||
-          nextBeat ||
-          "The next conflict is now unavoidable."
-      },
-
-      isFallback:
-        true
-    };
-  }
-
-  const narration =
-    mode ===
-    "cliffhanger_build"
-      ? `The scene tightens around a detail that can no longer be ignored. ${shorten(
-          nextBeat ||
-          cliffhanger,
-          300,
-          "Someone nearby realises the situation is about to change."
-        )}`
-      : `The latest decision changes the mood and the options available. ${shorten(
-          currentBeat,
-          300,
-          "Another character reacts in a way that makes the consequence clear."
-        )}`;
-
-  return {
-    mode:
-      mode,
-
-    narration:
-      narration,
-
-    messages:
-      firstNpc
-        ? [
-            {
-              character:
-                firstNpc,
-
-              text:
-                mode ===
-                "milestone_choice"
-                  ? "We need to decide what matters before someone else decides for us."
-                  : "That changes things. We cannot act as though nothing happened."
-            }
-          ]
-        : [],
-
-    choices:
-      mode ===
-      "milestone_choice"
-        ? realisticChoiceFallbacks()
-        : [],
-
-    chapterComplete:
-      false,
-
-    summary:
-      null,
-
-    isFallback:
-      true
-  };
+${
+JSON.stringify(
+sceneActive
+?
+[]
+:
+storyMemory
+)
 }
 
-async function playChapter(payload) {
-  const data =
-    payload || {};
+PREVIOUS CHAT MEMORY
 
-  const story =
-    data.story &&
-    typeof data.story ===
-    "object"
-      ? data.story
-      : {};
-
-  const characters =
-    Array.isArray(
-      data.characters
-    )
-      ? data.characters
-      : [];
-
-  const player =
-    data.playerCharacter ||
-    {};
-
-  const chapterNumber =
-    Math.max(
-      1,
-      number(
-        data.currentChapter,
-        1
-      )
-    );
-
-  const chapterLimit =
-    Math.max(
-      1,
-      number(
-        data.chapterLimit,
-        20
-      )
-    );
-
-  const interactionCount =
-    Math.max(
-      0,
-      number(
-        data.chapterInteractionCount,
-        0
-      )
-    );
-
-  const finalChapter =
-    chapterNumber >=
-    chapterLimit;
-
-  const milestones =
-    Array.isArray(
-      data.chapterMilestones
-    )
-      ? data.chapterMilestones
-          .map(Number)
-          .filter(
-            Number.isFinite
-          )
-      : [
-          5,
-          15,
-          25,
-          35,
-          45
-        ];
-
-  const chapterPlan =
-    data.currentChapterPlan
-    ||
-    (
-      Array.isArray(
-        data.chapterPlan
-      )
-        ? data.chapterPlan.find(
-            item => {
-              return (
-                Number(
-                  item &&
-                  item.chapter
-                ) ===
-                chapterNumber
-              );
-            }
-          )
-        : null
-    )
-    ||
-    {};
-
-  const mode =
-    getMode(
-      interactionCount,
-      milestones
-    );
-
-  const beat =
-    getBeat(
-      chapterPlan,
-      interactionCount
-    );
-
-  const storyMemory =
-    memoryWindow(
-      data.storyMemory,
-      26,
-      7
-    );
-
-  const importantChoices =
-    memoryWindow(
-      data.importantChoices,
-      14,
-      4
-    );
-
-  const npcs =
-    characters
-      .filter(character => {
-        return (
-          character &&
-          text(
-            character.name
-          ).toLowerCase()
-          !==
-          text(
-            player.name
-          ).toLowerCase()
-        );
-      })
-      .map(
-        compactCharacter
-      );
-
-  const npcNames =
-    npcs
-      .map(character => {
-        return character.name;
-      })
-      .filter(Boolean);
-
-  const firstNpc =
-    npcNames[0] || "";
-
-  const finalLineRule =
-    finalChapter
-      ? "The exact final line must be: The End."
-      : `The exact final line must be: To be continued in Chapter ${chapterNumber + 1}…`;
-
-  const prompt = `
-You are StoryVerse AI, continuing a realistic premium interactive story.
-
-Return ONLY valid JSON. Do not include markdown or explanations.
-
-STORY FOUNDATION
-
-Title: ${text(
-  story.title,
-  "Untitled Story"
-)}
-
-Genre: ${text(
-  story.genre,
-  "Drama"
-)}
-
-Story preview: ${shorten(
-  story.story ||
-  story.summary ||
-  story.description ||
-  story.fullStory,
-  1300
-)}
-
-CHAPTER STATE
-
-Chapter: ${chapterNumber} of ${chapterLimit}
-Interaction: ${interactionCount} of 50
-Mode: ${mode}
-
-Chapter title:
-${text(
-  chapterPlan.title,
-  `Chapter ${chapterNumber}`
-)}
-
-Chapter goal:
-${text(
-  chapterPlan.goal,
-  "Move the story toward a meaningful turning point."
-)}
-
-Setting:
-${text(
-  chapterPlan.setting
-)}
-
-Continuity from previous chapter:
-${text(
-  chapterPlan.continuityFromPrevious
-)}
-
-Emotional focus:
-${text(
-  chapterPlan.emotionalFocus
-)}
-
-Required reveal:
-${text(
-  chapterPlan.requiredReveal
-)}
-
-Choice impact guidance:
-${text(
-  chapterPlan.choiceImpact
-)}
-
-Required ending state:
-${text(
-  chapterPlan.endingState
-)}
-
-Planned cliffhanger:
-${text(
-  chapterPlan.cliffhanger
-)}
-
-CURRENT ROUTE BEAT
-
-${beat.current}
-
-NEXT ROUTE BEAT
-
-${beat.next}
-
-PLAYER PERSONA
-
-${JSON.stringify(
-  compactCharacter(
-    player
-  )
-)}
-
-NON-PLAYER CHARACTERS
-
-${JSON.stringify(
-  npcs
-)}
-
-RECENT AND LONG-TERM STORY MEMORY
-
-${JSON.stringify(
-  storyMemory
-)}
-
-IMPORTANT EARLIER CHOICES
-
-${JSON.stringify(
-  importantChoices
-)}
-
-PLAYER'S LATEST INPUT
-
-${text(
-  data.action,
-  "Continue naturally from the current scene."
-)}
-
-OUTPUT FORMAT
-
-{
-  "mode":"${mode}",
-  "narration":"Short scene narration",
-  "messages":[
-    {
-      "character":"Exact non-player character name",
-      "text":"Natural dialogue"
-    }
-  ],
-  "choices":[],
-  "chapterComplete":false,
-  "summary":null
+${
+JSON.stringify(
+chatHistory
+)
 }
 
-PLAYER AGENCY RULES
+ROLEPLAY RULES
 
-- The real user controls ${text(
-  player.name,
-  "the player character"
-)}.
+- Stay completely in character.
+- Reply directly to the user's latest message.
+- Speak only as the character.
+- Do not narrate the user's actions.
+- Do not narrate the user's thoughts.
+- Do not decide what the user feels or does.
+- Do not write dialogue for the user.
+- Avoid stage directions unless one very short gesture is necessary.
+- Use the character's personality and speech style naturally.
+- Use the user's persona when deciding how the character addresses them.
+- Keep continuity with earlier messages.
+- Do not repeat an earlier reply.
+- Do not merely repeat or paraphrase the user's message.
+- Let trust, friendship, romance and suspicion affect warmth and openness.
+- Keep secrets hidden unless the conversation naturally earns a reveal.
+- Write between 2 and 5 natural sentences.
+- Aim for approximately 45 to 110 words.
+- Do not give an incomplete or abruptly ending reply.
+- Avoid generic filler.
+- Every reply should show emotion, tension, concern, affection, suspicion, humour or conflict.
 
-- Never invent the player's spoken dialogue, private thoughts, feelings, decisions, or voluntary actions.
+LATEST USER MESSAGE
 
-- You may describe only immediate visible consequences affecting the player.
+${
+cleanText(
+message,
+900
+)
+}
 
-- Treat the latest input as intent. Do not rewrite it as a larger action than the user chose.
+CHARACTER REPLY:
 
-REALISTIC INTERACTION RULES
-
-- Respond directly to the latest input before advancing the route.
-
-- Every response must change something visible: another character's behaviour, access to information, risk, trust, suspicion, closeness, atmosphere, position, or available options.
-
-- Small actions may create small believable consequences. Do not turn every sentence into a crisis.
-
-- Let non-player characters have agency. They may disagree, hesitate, refuse, lie, joke, leave, help, apologise, misunderstand, protect themselves, or make plans of their own.
-
-- Use relationship scores silently. High trust allows honesty; low trust creates caution; high suspicion creates testing or distance; romance may create warmth, restraint, jealousy, or vulnerability.
-
-- Dialogue must match each character's speech style and emotional state.
-
-- Use one or two concrete sensory or physical details when helpful, not in every sentence.
-
-- Include natural pauses, interrupted speech, glances, movement, practical concerns, and imperfect reactions.
-
-- Refer to previous choices only when relevant. Do not recite memory.
-
-- Do not repeat the same warning, clue, argument, entrance, weather description, or emotional reaction.
-
-- Do not introduce random twists that are unrelated to the chapter route.
-
-- Alternate tension with quieter moments, humour, warmth, awkwardness, investigation, and reflection.
-
-- Do not always end on a question or dramatic statement.
-
-- Never use phrases about being an AI, prompt, system, or game engine.
-
-MODE RULES
-
-NORMAL:
-
-- Write 45 to 90 words of narration, normally 2 to 4 sentences.
-
-- Include 1 to 3 dialogue messages when characters are present and dialogue adds value.
-
-- Dialogue should sound conversational, not like speeches.
-
-- choices must be [].
-
-- chapterComplete must be false.
-
-MILESTONE_CHOICE:
-
-- Write 35 to 70 words of narration that makes the decision meaningful.
-
-- Include exactly four choices with types emotional, relationship, mystery, and risky.
-
-- Each choice must be a concrete action or response that fits the exact scene.
-
-- Choices must produce visibly different emotional or practical consequences.
-
-- Stop after presenting the choices.
-
-- chapterComplete must be false.
-
-CLIFFHANGER_BUILD:
-
-- Write 70 to 120 words.
-
-- Bring together the route beat, required reveal, and accumulated consequences.
-
-- Increase pressure without completing the chapter.
-
-- choices must be [].
-
-- chapterComplete must be false.
-
-CHAPTER_FINALE:
-
-- Write 110 to 190 words.
-
-- Pay off the chapter goal, required reveal, and important choices.
-
-- The cliffhanger must feel earned and must grow from what happened.
-
-- choices must be [].
-
-- chapterComplete must be true.
-
-- summary must include chapterTitle, keyEvents, importantChoices, relationshipChanges, characterDevelopments, currentMysteries, and cliffhangerDescription.
-
-- relationshipChanges must be objects with character, trust, friendship, romance, suspicion, and reason. Use changes from -10 to 10, not final scores.
-
-- ${finalLineRule}
-
-Return valid JSON only.
 `;
 
-  let aiText = "";
-
-  try {
-    aiText =
-      await callGemini(
-        prompt,
-        {
-          temperature:
-            mode === "normal"
-              ? 0.84
-              : 0.78,
-
-          responseMimeType:
-            "application/json",
-
-          maxOutputTokens:
-            mode ===
-            "chapter_finale"
-              ? 1200
-              : mode ===
-                "milestone_choice"
-                ? 800
-                : mode ===
-                  "cliffhanger_build"
-                  ? 800
-                  : 650
-        }
-      );
-
-    const parsed =
-      JSON.parse(
-        cleanJsonText(
-          aiText
-        )
-      );
-
-    const complete =
-      mode ===
-      "chapter_finale"
-      ||
-      parsed.chapterComplete ===
-      true;
-
-    return {
-      mode:
-        mode,
-
-      narration:
-        shorten(
-          parsed.narration,
-          mode ===
-          "chapter_finale"
-            ? 1800
-            : 1050,
-          "The scene changes in response to the player's decision."
-        ),
-
-      messages:
-        normalizeMessages(
-          parsed.messages,
-          player.name,
-          npcNames
-        ),
-
-      choices:
-        mode ===
-        "milestone_choice"
-          ? normalizeChoices(
-              parsed.choices
-            )
-          : [],
-
-      chapterComplete:
-        complete,
-
-      summary:
-        complete
-          ? normalizeSummary(
-              parsed.summary,
-              chapterNumber,
-              chapterPlan,
-              data.action
-            )
-          : null,
-
-      isFallback:
-        false
-    };
-  }
-  catch (error) {
-    console.error(
-      "Interactive chapter generation failed:",
-      error
-    );
-
-    if (aiText) {
-      console.error(
-        "Raw chapter response:",
-        aiText
-      );
-    }
-
-    return fallbackResponse(
-      mode,
-      {
-        chapterNumber:
-          chapterNumber,
-
-        finalChapter:
-          finalChapter,
-
-        currentBeat:
-          beat.current,
-
-        nextBeat:
-          beat.next,
-
-        cliffhanger:
-          text(
-            chapterPlan.cliffhanger
-          ),
-
-        chapterTitle:
-          text(
-            chapterPlan.title,
-            `Chapter ${chapterNumber}`
-          ),
-
-        action:
-          text(
-            data.action
-          ),
-
-        firstNpc:
-          firstNpc
-      }
-    );
-  }
 }
 
+
+/*
+==================================================
+GEMINI REQUEST
+==================================================
+*/
+
+async function requestReply(
+prompt,
+options
+){
+
+const result =
+await callGemini(
+prompt,
+options
+);
+
+return cleanText(
+result,
+1600
+);
+
+}
+
+
+/*
+==================================================
+MAIN CHARACTER CHAT FUNCTION
+==================================================
+*/
+
+async function chatWithCharacter(
+data
+){
+
+const safeData =
+data ||
+{};
+
+const story =
+safeData.story ||
+{};
+
+const user =
+safeData.userPersona ||
+safeData.persona ||
+safeData.user ||
+{};
+
+const playerCharacter =
+safeData.playerCharacter ||
+{};
+
+const character =
+safeData.character ||
+{};
+
+const message =
+cleanText(
+safeData.message,
+900
+);
+
+const scene =
+cleanText(
+safeData.chatScene,
+500
+);
+
+const relationship =
+character.relationship ||
+{
+
+trust:50,
+
+friendship:50,
+
+romance:0,
+
+suspicion:0
+
+};
+
+if(!message){
+
+throw new Error(
+"Chat message is required."
+);
+
+}
+
+if(!character.name){
+
+throw new Error(
+"Character information is missing."
+);
+
+}
+
+const sceneActive =
+Boolean(
+scene
+);
+
+
+/*
+Do not send normal story memory when
+the user is inside a custom scene.
+*/
+
+const storyMemory =
+compactMemory(
+
+sceneActive
+?
+[]
+:
+safeData.storyMemory,
+
+16
+
+);
+
+
+/*
+Use only the latest relevant chat history.
+This prevents excessive Gemini input tokens.
+*/
+
+const chatHistory =
+compactMemory(
+
+safeData.chatHistory,
+
+22
+
+);
+
+
+/*
+==================================================
+FIRST GEMINI ATTEMPT
+==================================================
+*/
+
+const primaryPrompt =
+buildPrompt({
+
+story:
+story,
+
+user:
+user,
+
+playerCharacter:
+playerCharacter,
+
+currentChapter:
+safeData.currentChapter,
+
+scene:
+scene,
+
+storyMemory:
+storyMemory,
+
+chatHistory:
+chatHistory,
+
+character:
+character,
+
+message:
+message,
+
+relationship:
+relationship,
+
+compact:
+false
+
+});
+
+try{
+
+const reply =
+await requestReply(
+primaryPrompt,
+{
+
+temperature:
+0.82,
+
+maxOutputTokens:
+320
+
+}
+);
+
+if(reply){
+
+return reply;
+
+}
+
+throw new Error(
+"Gemini returned an empty chat reply."
+);
+
+}
+
+
+/*
+==================================================
+SECOND SMALLER GEMINI ATTEMPT
+==================================================
+*/
+
+catch(firstError){
+
+console.error(
+"Primary character chat generation failed:"
+);
+
+console.error(
+firstError.message ||
+firstError
+);
+
+const retryPrompt =
+buildPrompt({
+
+story:
+story,
+
+user:
+user,
+
+playerCharacter:
+playerCharacter,
+
+currentChapter:
+safeData.currentChapter,
+
+scene:
+scene,
+
+storyMemory:
+storyMemory.slice(
+-8
+),
+
+chatHistory:
+chatHistory.slice(
+-10
+),
+
+character:
+character,
+
+message:
+message,
+
+relationship:
+relationship,
+
+compact:
+true
+
+});
+
+try{
+
+const retryReply =
+await requestReply(
+retryPrompt,
+{
+
+temperature:
+0.72,
+
+maxOutputTokens:
+220
+
+}
+);
+
+if(retryReply){
+
+return retryReply;
+
+}
+
+throw new Error(
+"Gemini retry returned an empty reply."
+);
+
+}
+
+
+/*
+==================================================
+LOCAL FALLBACK RESPONSE
+==================================================
+
+If Gemini quota, network or model access fails,
+return a character-style reply instead of making
+the frontend display “Unable to get a reply”.
+*/
+
+catch(retryError){
+
+console.error(
+"Character chat retry failed:"
+);
+
+console.error(
+retryError.message ||
+retryError
+);
+
+return buildFallbackReply({
+
+character:
+character,
+
+user:
+user,
+
+message:
+message,
+
+scene:
+scene,
+
+relationship:
+relationship
+
+});
+
+}
+
+}
+
+}
+
+
 module.exports = {
-  playChapter
+
+chatWithCharacter
+
 };
