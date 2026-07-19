@@ -10,32 +10,32 @@ TEXT HELPERS
 
 function cleanText(
 value,
-maximumLength = 500
+maximumLength = 1200
 ){
 
-const text =
+const result =
 String(
 value ?? ""
 )
 .trim();
 
-if(!text){
+if(!result){
 
 return "";
 
 }
 
 if(
-text.length <=
+result.length <=
 maximumLength
 ){
 
-return text;
+return result;
 
 }
 
 return (
-text
+result
 .slice(
 0,
 maximumLength
@@ -55,13 +55,13 @@ MEMORY COMPRESSION
 */
 
 function compactMemory(
-items,
-limit = 18
+entries,
+limit
 ){
 
 if(
 !Array.isArray(
-items
+entries
 )
 ){
 
@@ -69,14 +69,14 @@ return [];
 
 }
 
-return items
+return entries
 .slice(
 -limit
 )
-.map(item=>{
+.map(entry=>{
 
 if(
-typeof item ===
+typeof entry ===
 "string"
 ){
 
@@ -87,7 +87,7 @@ type:
 
 text:
 cleanText(
-item,
+entry,
 320
 )
 
@@ -96,10 +96,29 @@ item,
 }
 
 if(
-!item ||
-typeof item !==
+!entry ||
+typeof entry !==
 "object"
 ){
+
+return null;
+
+}
+
+const memoryText =
+cleanText(
+
+entry.text ||
+entry.message ||
+entry.narration ||
+entry.summary ||
+"",
+
+360
+
+);
+
+if(!memoryText){
 
 return null;
 
@@ -109,200 +128,325 @@ return {
 
 type:
 cleanText(
-item.type ||
-item.role ||
+entry.type ||
+entry.role ||
 "memory",
 40
 ),
 
 speaker:
 cleanText(
-item.speaker ||
-item.character ||
-item.characterName ||
+
+entry.speaker ||
+entry.character ||
+entry.characterName ||
 "",
+
 80
+
 ),
 
 text:
-cleanText(
-item.text ||
-item.message ||
-item.narration ||
-item.summary ||
-"",
-360
-)
+memoryText
 
 };
 
 })
-.filter(item=>{
-
-return (
-item &&
-item.text
-);
-
-});
+.filter(Boolean);
 
 }
 
 
 /*
 ==================================================
-RELATIONSHIP NUMBER
+ADAPTIVE REPLY LENGTH
 ==================================================
 */
 
-function relationshipNumber(
-value,
-fallback
+function getReplyProfile(
+message
 ){
 
-const number =
-Number(
-value
+const text =
+String(
+message || ""
+)
+.trim();
+
+const lower =
+text.toLowerCase();
+
+const words =
+text
+?
+text
+.split(/\s+/)
+.filter(Boolean)
+.length
+:
+0;
+
+const questionCount =
+(
+text.match(/\?/g) ||
+[]
+).length;
+
+
+/*
+Very simple greetings and acknowledgements.
+*/
+
+const simpleGreeting =
+/^(hi|hello|hey|hii+|heyy+|good morning|good afternoon|good evening|good night|thanks|thank you|okay|ok|yes|no|sure|fine)[.!?\s]*$/i
+.test(
+text
 );
 
-return Number.isFinite(
-number
+
+/*
+Messages that usually need an explanation.
+*/
+
+const needsExplanation =
+/(why|how|explain|tell me|what happened|what do you mean|how could|can we talk|be honest|truth|confess|because)/i
+.test(
+lower
+);
+
+
+/*
+Short emotional messages may still need
+more than a one-line response.
+*/
+
+const emotionallyHeavy =
+/(love|hate|betray|betrayed|hurt|leave|left me|miss you|sorry|forgive|afraid|scared|angry|jealous|trust|breakup|goodbye|never again)/i
+.test(
+lower
+);
+
+
+if(
+simpleGreeting ||
+(
+words <= 3 &&
+questionCount === 0
 )
-?
-number
-:
-fallback;
+){
+
+return {
+
+mode:
+"very_short",
+
+instruction:
+"Reply in 1 short, natural sentence. Usually 4 to 18 words. Do not add an unnecessary explanation.",
+
+maxOutputTokens:
+70
+
+};
+
+}
+
+
+if(
+words <= 12 &&
+questionCount <= 1 &&
+!needsExplanation &&
+!emotionallyHeavy
+){
+
+return {
+
+mode:
+"short",
+
+instruction:
+"Reply in 1 or 2 natural sentences. Usually 10 to 40 words. Be direct and realistic.",
+
+maxOutputTokens:
+110
+
+};
+
+}
+
+
+if(
+words <= 45 &&
+questionCount <= 2
+){
+
+return {
+
+mode:
+"normal",
+
+instruction:
+"Reply in 2 to 4 natural sentences. Usually 25 to 85 words. Use only the detail needed for this moment.",
+
+maxOutputTokens:
+210
+
+};
+
+}
+
+
+return {
+
+mode:
+"detailed",
+
+instruction:
+"Reply in 3 to 6 natural sentences. Usually 60 to 150 words. Address the important points without padding or repeating the user.",
+
+maxOutputTokens:
+340
+
+};
 
 }
 
 
 /*
 ==================================================
-OFFLINE / API FAILURE FALLBACK REPLY
+EMERGENCY FALLBACK REPLY
 ==================================================
+
+Used only when Gemini fails twice.
+It also follows adaptive reply length.
 */
 
 function buildFallbackReply({
 
-character,
-
-user,
-
 message,
 
 scene,
 
-relationship
+relationship,
+
+profile
 
 }){
 
-const characterName =
-cleanText(
-character.name,
-80
-) ||
-"I";
-
-const userName =
-cleanText(
-user.name ||
-user.displayName,
-80
-);
-
-const latestMessage =
-cleanText(
-message,
-180
-);
-
-const activeScene =
-cleanText(
-scene,
-220
-);
+const lower =
+String(
+message || ""
+)
+.toLowerCase();
 
 const trust =
-relationshipNumber(
-relationship.trust,
+Number(
+relationship.trust ??
 50
 );
 
 const romance =
-relationshipNumber(
-relationship.romance,
+Number(
+relationship.romance ??
 0
 );
 
 const suspicion =
-relationshipNumber(
-relationship.suspicion,
+Number(
+relationship.suspicion ??
 0
 );
 
-let opening;
+
+if(
+profile.mode ===
+"very_short"
+){
+
+if(
+/thank/.test(
+lower
+)
+){
+
+return (
+"You don’t have to thank me."
+);
+
+}
+
+if(
+/^(hi|hello|hey|hii+|heyy+)/i
+.test(
+message
+)
+){
+
+return (
+"Hey. What’s on your mind?"
+);
+
+}
+
+return (
+"I’m here. Go on."
+);
+
+}
+
 
 if(
 suspicion >= 65
 ){
 
-opening =
-"I heard you, but I am not ready to accept that without questions.";
+return (
+"I heard you, but I’m not ready to accept that without questions. Tell me what you are leaving out."
+);
 
 }
-else if(
+
+
+if(
 romance >= 60
 ){
 
-opening =
-"I am trying to stay calm, but what you said matters to me more than I want to admit.";
+return scene
+?
+(
+"I’m trying to stay calm, but this moment matters to me more than I want to admit. Tell me what you really want from us."
+)
+:
+(
+"What you said matters to me more than I want to admit. Just be honest with me now."
+);
 
 }
-else if(
+
+
+if(
 trust >= 65
 ){
 
-opening =
-"I believe you are being honest with me, so I am listening.";
-
-}
-else{
-
-opening =
-"I heard what you said, and I need a moment to understand what you really mean.";
+return (
+"I believe you’re trying to be honest with me. Say the rest plainly—I’m listening."
+);
 
 }
 
-const sceneLine =
-activeScene
-?
-"In this moment, I do not want us to avoid what is happening between us."
-:
-"I do not want to give you an empty answer just to end the conversation.";
 
-const closing =
-latestMessage
-?
-(
-userName
-?
-userName + ", "
-:
-""
-)
-+
-"say it plainly—what do you need from " +
-characterName +
-" right now?"
-:
-"Tell me what you are really trying to say.";
+if(
+profile.mode ===
+"detailed"
+){
 
 return (
-opening +
-" " +
-sceneLine +
-" " +
-closing
+"I’m listening, but I don’t want to answer with something empty. Tell me what brought you to this point, and I’ll answer you honestly."
+);
+
+}
+
+
+return (
+"I heard you. Tell me what you really mean."
 );
 
 }
@@ -318,13 +462,13 @@ function buildPrompt({
 
 story,
 
-user,
+userPersona,
 
 playerCharacter,
 
 currentChapter,
 
-scene,
+chatScene,
 
 storyMemory,
 
@@ -336,243 +480,75 @@ message,
 
 relationship,
 
-compact = false
+replyProfile
 
 }){
 
 const sceneActive =
 Boolean(
-scene
+chatScene
 );
 
-const storyContext =
-compact
-?
-(
+return `
+
+You are roleplaying as one fictional character in StoryVerse.
+
+Return only the character's reply as plain text.
+
+Do not return JSON.
+Do not use markdown.
+Do not add a heading.
+Do not place quotation marks around the entire reply.
+Never say you are an AI.
+
+IMPORTANT USER RULE
+
+The person chatting is the USER PERSONA.
+
+Do not automatically treat the user as the story main character.
+
+The story main character is background context unless the persona is the same person.
+
+STORY CONTEXT
+
+Title:
+${
 cleanText(
 story.title,
 100
-)
-+
-" | " +
+) ||
+"Untitled Story"
+}
+
+Genre:
+${
 cleanText(
 story.genre,
 60
-)
-)
-:
-JSON.stringify({
+) ||
+"Drama"
+}
 
-title:
-cleanText(
-story.title,
-100
-),
+Current Chapter:
+${currentChapter || 1}
 
-genre:
-cleanText(
-story.genre,
-60
-),
+Story Summary:
 
-summary:
+${
 cleanText(
+
 story.story ||
 story.summary ||
 story.fullStory,
+
 1000
-),
 
-currentChapter:
-currentChapter ||
-1
-
-});
-
-const characterContext =
-JSON.stringify({
-
-name:
-cleanText(
-character.name,
-80
-),
-
-age:
-cleanText(
-character.age,
-30
-),
-
-role:
-cleanText(
-character.role,
-100
-),
-
-occupation:
-cleanText(
-character.occupation,
-100
-),
-
-traits:
-cleanText(
-character.traits,
-240
-),
-
-speechStyle:
-cleanText(
-character.speechStyle,
-120
-),
-
-relationshipStyle:
-cleanText(
-character.relationshipStyle,
-120
-),
-
-strengths:
-cleanText(
-character.strengths,
-180
-),
-
-weaknesses:
-cleanText(
-character.weaknesses,
-180
-),
-
-likes:
-cleanText(
-character.likes,
-180
-),
-
-dislikes:
-cleanText(
-character.dislikes,
-180
-),
-
-hobbies:
-cleanText(
-character.hobbies,
-180
-),
-
-fears:
-cleanText(
-character.fears,
-160
-),
-
-profile:
-cleanText(
-character.profile,
-compact
-?
-420
-:
-700
-),
-
-rules:
-cleanText(
-character.rules,
-320
-),
-
-secretType:
-cleanText(
-character.secretType,
-100
 )
+}
 
-});
+STORY MAIN CHARACTER BACKGROUND
 
-const userContext =
-JSON.stringify({
-
-name:
-cleanText(
-user.name ||
-user.displayName,
-80
-)
-||
-"User",
-
-role:
-cleanText(
-user.role,
-100
-)
-||
-"Player",
-
-occupation:
-cleanText(
-user.occupation,
-100
-),
-
-traits:
-cleanText(
-user.traits ||
-user.personality,
-220
-),
-
-speechStyle:
-cleanText(
-user.speechStyle,
-120
-),
-
-relationshipStyle:
-cleanText(
-user.relationshipStyle,
-120
-),
-
-likes:
-cleanText(
-user.likes,
-160
-),
-
-dislikes:
-cleanText(
-user.dislikes,
-160
-),
-
-fears:
-cleanText(
-user.fears,
-140
-),
-
-profile:
-cleanText(
-user.profile ||
-user.bio,
-500
-),
-
-rules:
-cleanText(
-user.rules,
-240
-)
-
-});
-
-const playerContext =
+${
 JSON.stringify({
 
 name:
@@ -590,31 +566,75 @@ playerCharacter.role,
 profile:
 cleanText(
 playerCharacter.profile,
-350
+420
 )
 
-});
+})
+}
 
-return `
+USER PERSONA
 
-You are roleplaying as one fictional StoryVerse character.
+${
+JSON.stringify({
 
-Return only the character's reply as plain text.
+name:
+cleanText(
 
-Do not return JSON.
-Do not return markdown.
-Do not include headings.
-Do not include explanations.
-Do not place quotation marks around the entire reply.
-Never say you are an AI.
+userPersona.name ||
+userPersona.displayName ||
+"User",
 
-IMPORTANT USER PERSONA RULE
+80
 
-The person chatting is the USER PERSONA.
+),
 
-Do not automatically treat the user as the story main character.
+role:
+cleanText(
+userPersona.role ||
+"Player",
+100
+),
 
-The story main character is background context unless the user persona is the same person.
+occupation:
+cleanText(
+userPersona.occupation,
+100
+),
+
+traits:
+cleanText(
+
+userPersona.traits ||
+userPersona.personality,
+
+220
+
+),
+
+speechStyle:
+cleanText(
+userPersona.speechStyle,
+120
+),
+
+relationshipStyle:
+cleanText(
+userPersona.relationshipStyle,
+120
+),
+
+profile:
+cleanText(
+
+userPersona.profile ||
+userPersona.bio,
+
+500
+
+)
+
+})
+}
 
 CONVERSATION MODE
 
@@ -632,72 +652,140 @@ ${
 sceneActive
 ?
 cleanText(
-scene,
+chatScene,
 500
 )
 :
-"No custom scene is active."
+"No custom scene is active. Continue from normal story and chat context."
 }
 
 SCENE RULES
 
-- When a custom scene is active, remain completely inside that scene.
-- Use the scene-specific chat history as the primary memory.
-- Preserve the scene's emotional state, conflict, closeness, tension and unresolved details.
+- When a custom scene is active, remain fully inside that scene until it is cleared.
+- Treat the scene and scene-specific history as the primary reality of this conversation.
+- Preserve the emotional state, closeness, conflict, distrust or tension already created in the scene.
 - Do not continue the normal chapter timeline while scene mode is active.
 - Never call the scene temporary, fake, imagined, alternate or non-canon.
-- Never explain that the scene is separate from the original story.
-- When no scene is active, continue naturally from the story and normal chat history.
-
-STORY CONTEXT
-
-${storyContext}
-
-STORY MAIN CHARACTER BACKGROUND
-
-${playerContext}
-
-USER PERSONA
-
-${userContext}
+- When no scene is active, continue naturally from normal story memory and normal chat history.
 
 CHARACTER YOU ARE PLAYING
 
-${characterContext}
+${
+JSON.stringify({
 
-RELATIONSHIP STATE
+name:
+cleanText(
+character.name ||
+"Character",
+80
+),
+
+age:
+cleanText(
+character.age,
+30
+),
+
+occupation:
+cleanText(
+character.occupation,
+100
+),
+
+role:
+cleanText(
+character.role,
+100
+),
+
+speechStyle:
+cleanText(
+character.speechStyle,
+120
+),
+
+relationshipStyle:
+cleanText(
+character.relationshipStyle,
+120
+),
+
+traits:
+cleanText(
+character.traits,
+240
+),
+
+strengths:
+cleanText(
+character.strengths,
+180
+),
+
+weaknesses:
+cleanText(
+character.weaknesses,
+180
+),
+
+likes:
+cleanText(
+character.likes,
+160
+),
+
+dislikes:
+cleanText(
+character.dislikes,
+160
+),
+
+hobbies:
+cleanText(
+character.hobbies,
+160
+),
+
+fears:
+cleanText(
+character.fears,
+140
+),
+
+secretType:
+cleanText(
+character.secretType,
+100
+),
+
+profile:
+cleanText(
+character.profile,
+700
+),
+
+rules:
+cleanText(
+character.rules,
+300
+)
+
+})
+}
+
+CURRENT RELATIONSHIP
 
 Trust:
-${
-relationshipNumber(
-relationship.trust,
-50
-)
-}
+${Number(relationship.trust ?? 50)}
 
 Friendship:
-${
-relationshipNumber(
-relationship.friendship,
-50
-)
-}
+${Number(relationship.friendship ?? 50)}
 
 Romance:
-${
-relationshipNumber(
-relationship.romance,
-0
-)
-}
+${Number(relationship.romance ?? 0)}
 
 Suspicion:
-${
-relationshipNumber(
-relationship.suspicion,
-0
-)
-}
+${Number(relationship.suspicion ?? 0)}
 
 RECENT STORY MEMORY
 
@@ -719,28 +807,36 @@ chatHistory
 )
 }
 
+ADAPTIVE REPLY LENGTH
+
+${replyProfile.instruction}
+
+REPLY LENGTH RULES
+
+- Match the length and emotional weight of the user's message.
+- A greeting, acknowledgement, teasing line or simple question should receive a short reply.
+- A short input does not automatically need a paragraph.
+- Use a longer reply only when the user asks for an explanation, sends a confession, raises several points, or the emotional moment genuinely needs detail.
+- Never pad a reply just to make it longer.
+- Never cut an important emotional answer short merely to make it brief.
+- Do not repeat information simply to increase reply length.
+
 ROLEPLAY RULES
 
 - Stay completely in character.
-- Reply directly to the user's latest message.
+- Reply directly to the latest message before adding anything else.
 - Speak only as the character.
-- Do not narrate the user's actions.
-- Do not narrate the user's thoughts.
-- Do not decide what the user feels or does.
+- Do not narrate or control the user.
 - Do not write dialogue for the user.
-- Avoid stage directions unless one very short gesture is necessary.
-- Use the character's personality and speech style naturally.
-- Use the user's persona when deciding how the character addresses them.
-- Keep continuity with earlier messages.
+- Avoid stage directions unless one very short gesture is essential.
+- Use the character's speech style naturally.
+- Keep continuity with previous messages.
 - Do not repeat an earlier reply.
-- Do not merely repeat or paraphrase the user's message.
-- Let trust, friendship, romance and suspicion affect warmth and openness.
+- Do not merely paraphrase the user's message.
+- Let trust, friendship, romance and suspicion influence warmth and openness.
 - Keep secrets hidden unless the conversation naturally earns a reveal.
-- Write between 2 and 5 natural sentences.
-- Aim for approximately 45 to 110 words.
-- Do not give an incomplete or abruptly ending reply.
 - Avoid generic filler.
-- Every reply should show emotion, tension, concern, affection, suspicion, humour or conflict.
+- End the reply naturally and completely.
 
 LATEST USER MESSAGE
 
@@ -760,32 +856,7 @@ CHARACTER REPLY:
 
 /*
 ==================================================
-GEMINI REQUEST
-==================================================
-*/
-
-async function requestReply(
-prompt,
-options
-){
-
-const result =
-await callGemini(
-prompt,
-options
-);
-
-return cleanText(
-result,
-1600
-);
-
-}
-
-
-/*
-==================================================
-MAIN CHARACTER CHAT FUNCTION
+MAIN CHAT FUNCTION
 ==================================================
 */
 
@@ -801,7 +872,8 @@ const story =
 safeData.story ||
 {};
 
-const user =
+const userPersona =
+
 safeData.userPersona ||
 safeData.persona ||
 safeData.user ||
@@ -821,7 +893,7 @@ safeData.message,
 900
 );
 
-const scene =
+const chatScene =
 cleanText(
 safeData.chatScene,
 500
@@ -841,6 +913,7 @@ suspicion:0
 
 };
 
+
 if(!message){
 
 throw new Error(
@@ -848,6 +921,7 @@ throw new Error(
 );
 
 }
+
 
 if(!character.name){
 
@@ -857,15 +931,21 @@ throw new Error(
 
 }
 
+
 const sceneActive =
 Boolean(
-scene
+chatScene
+);
+
+const replyProfile =
+getReplyProfile(
+message
 );
 
 
 /*
-Do not send normal story memory when
-the user is inside a custom scene.
+Do not send normal story memory while
+inside a custom scene.
 */
 
 const storyMemory =
@@ -883,8 +963,8 @@ safeData.storyMemory,
 
 
 /*
-Use only the latest relevant chat history.
-This prevents excessive Gemini input tokens.
+Use the selected normal or scene-specific
+chat history sent by character-chat.html.
 */
 
 const chatHistory =
@@ -897,20 +977,14 @@ safeData.chatHistory,
 );
 
 
-/*
-==================================================
-FIRST GEMINI ATTEMPT
-==================================================
-*/
-
-const primaryPrompt =
+const prompt =
 buildPrompt({
 
 story:
 story,
 
-user:
-user,
+userPersona:
+userPersona,
 
 playerCharacter:
 playerCharacter,
@@ -918,8 +992,8 @@ playerCharacter,
 currentChapter:
 safeData.currentChapter,
 
-scene:
-scene,
+chatScene:
+chatScene,
 
 storyMemory:
 storyMemory,
@@ -936,25 +1010,38 @@ message,
 relationship:
 relationship,
 
-compact:
-false
+replyProfile:
+replyProfile
 
 });
 
+
+/*
+==================================================
+FIRST GEMINI ATTEMPT
+==================================================
+*/
+
 try{
 
-const reply =
-await requestReply(
-primaryPrompt,
+const aiText =
+await callGemini(
+prompt,
 {
 
 temperature:
 0.82,
 
 maxOutputTokens:
-320
+replyProfile.maxOutputTokens
 
 }
+);
+
+const reply =
+cleanText(
+aiText,
+1800
 );
 
 if(reply){
@@ -972,7 +1059,7 @@ throw new Error(
 
 /*
 ==================================================
-SECOND SMALLER GEMINI ATTEMPT
+SECOND GEMINI ATTEMPT
 ==================================================
 */
 
@@ -987,14 +1074,15 @@ firstError.message ||
 firstError
 );
 
+
 const retryPrompt =
 buildPrompt({
 
 story:
 story,
 
-user:
-user,
+userPersona:
+userPersona,
 
 playerCharacter:
 playerCharacter,
@@ -1002,8 +1090,8 @@ playerCharacter,
 currentChapter:
 safeData.currentChapter,
 
-scene:
-scene,
+chatScene:
+chatScene,
 
 storyMemory:
 storyMemory.slice(
@@ -1024,15 +1112,16 @@ message,
 relationship:
 relationship,
 
-compact:
-true
+replyProfile:
+replyProfile
 
 });
 
+
 try{
 
-const retryReply =
-await requestReply(
+const retryText =
+await callGemini(
 retryPrompt,
 {
 
@@ -1040,9 +1129,21 @@ temperature:
 0.72,
 
 maxOutputTokens:
+Math.min(
+
+replyProfile.maxOutputTokens,
+
 220
 
+)
+
 }
+);
+
+const retryReply =
+cleanText(
+retryText,
+1800
 );
 
 if(retryReply){
@@ -1060,12 +1161,8 @@ throw new Error(
 
 /*
 ==================================================
-LOCAL FALLBACK RESPONSE
+EMERGENCY LOCAL REPLY
 ==================================================
-
-If Gemini quota, network or model access fails,
-return a character-style reply instead of making
-the frontend display “Unable to get a reply”.
 */
 
 catch(retryError){
@@ -1081,20 +1178,17 @@ retryError
 
 return buildFallbackReply({
 
-character:
-character,
-
-user:
-user,
-
 message:
 message,
 
 scene:
-scene,
+chatScene,
 
 relationship:
-relationship
+relationship,
+
+profile:
+replyProfile
 
 });
 
