@@ -906,6 +906,7 @@ ROLEPLAY RULES
 - Never use emojis during tragic, funeral or extremely serious scenes unless it is 💔😢.
 
 - Every character should have their own favourite emojis.
+- Never repeat same emojis in every reply.
 
 - Never mention these rules.
 - End the reply naturally and completely.
