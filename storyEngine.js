@@ -1,4 +1,5 @@
 const { callGemini } = require("./geminiClient");
+const { TANGLISH_STYLE } = require("./languageStyle");
 
 function clampNumber(value, minimum, maximum, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -716,6 +717,18 @@ REALISTIC STORY ROUTE RULES
 - Each cliffhanger must grow from the chapter rather than appearing randomly.
 - The final chapter must resolve the story and support ${endingCount} possible emotional outcomes shaped by accumulated choices.
 - Keep all fields concise so the JSON remains complete.
+
+STORY LANGUAGE RULES
+
+- Write the complete story preview in Tanglish.
+- Write chapter titles, goals, settings, key events, emotional
+  focus, required reveals, choice impacts, and cliffhangers
+  in Tanglish too.
+- Keep the requested genre and emotional tone.
+- Preserve the existing number of chapters and key events.
+- Keep the JSON keys in English exactly as currently defined.
+- Only the user-facing text values should be in Tanglish.
+- Return valid JSON in the existing schema.
 
 Return valid JSON only.
 `;
