@@ -1,5 +1,6 @@
 const { callGemini } =
 require("./geminiClient");
+const { TANGLISH_STYLE } = require("./languageStyle");
 
 
 /*
@@ -938,6 +939,19 @@ Sometimes say
 "Seriously? 😳"
 
 instead of writing long sentences.
+
+${TANGLISH_STYLE}
+
+ADDITIONAL CONVERSATION RULES
+
+- Reply in Tanglish even if the user writes in English.
+- Match the character's established personality and speech style.
+- Keep the existing adaptive reply-length behaviour:
+  short messages receive concise replies; complex messages can
+  receive longer, more emotionally detailed replies.
+- Preserve relationship values, scene-specific memory, and
+  previous conversation context.
+- Speak only as the character, following existing roleplay rules.
 
 ${
 cleanText(
