@@ -1,6 +1,9 @@
 const { callGemini } =
 require("./geminiClient");
 
+const { TANGLISH_STYLE } = 
+require("./languageStyle");
+
 function safeNumber(
 value,
 fallback = 0
@@ -1049,6 +1052,21 @@ If the free-text message contradicts the route, acknowledge the attempt naturall
 `;
 
 const prompt = `
+
+ 
+${TANGLISH_STYLE}
+
+MANDATORY STORY LANGUAGE RULES
+
+- Write all narration in natural Tanglish: conversational Tamil written using English/Roman letters, mixed naturally with English.
+- Write all character dialogue in the same natural Tanglish style.
+- Write all player choices in Tanglish.
+- Write chapter summaries and user-facing story text in Tanglish.
+- Do not write the entire response in English.
+- Do not use Tamil script.
+- Preserve character personalities, story facts, planned chapter routes, memories, and player choices.
+- Keep all JSON property names in English and preserve the existing JSON response structure.
+
 You are StoryVerse AI, writing one response in a premium interactive story.
 
 Return ONLY valid JSON.
