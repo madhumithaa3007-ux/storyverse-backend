@@ -41,7 +41,7 @@ temperature:
 options.temperature || 0.8,
 
 maxOutputTokens:
-options.maxOutputTokens || 700,
+options.maxOutputTokens || 1200,
 
 responseMimeType:
 options.responseMimeType || undefined
