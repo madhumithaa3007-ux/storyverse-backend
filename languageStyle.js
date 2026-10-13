@@ -19,6 +19,8 @@ mixed language (Tanglish), using English/Roman letters.
    balanced Tamil-English mix.
 10. Keep the same language style across chapters, dialogue,
     choices, recaps, summaries, and character conversations.
+11. Use contractions, colloquial expressions, and casual phrasing to make the story feel authentic and relatable.
+12. Avoid overly formal or stiff language that may break immersion.
 `;
 
 module.exports = {
