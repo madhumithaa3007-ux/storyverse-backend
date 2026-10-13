@@ -43,122 +43,93 @@ message:"StoryVerse AI Backend Running"
 });
 
 app.post("/generate-story", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const {
+      title, genre, mood, theme, worldSetting, romanceType,
+      conflictType, storyLength, characterCount, endingCount, idea
+    } = body;
 
-    try {
+    console.log("================================");
+    console.log("Story Generation Request");
+    console.log("Title:", title || "Untitled Story");
+    console.log("Genre:", genre || "Drama");
+    console.log("================================");
 
-       const {
-title,
-genre,
-mood,
-theme,
-worldSetting,
-romanceType,
-conflictType,
-storyLength,
-characterCount,
-endingCount,
-idea
-} = req.body;
+    const generatedStory = await generateStory({
+      title, genre, mood, theme, worldSetting, romanceType,
+      conflictType, storyLength, characterCount, endingCount, idea
+    });
 
-        console.log("================================");
-        console.log("Story Generation Request");
-        console.log("Title:", title);
-        console.log("Genre:", genre);
-        console.log("Idea:", idea);
-        console.log("================================");
-console.log(req.body);
-const generatedStory =
-await generateStory({
-title,
-genre,
-mood,
-theme,
-worldSetting,
-romanceType,
-conflictType,
-storyLength,
-characterCount,
-endingCount,
-idea
-});
+    const story = generatedStory.storyPreview || generatedStory.story || "";
+    const chapterPlan = Array.isArray(generatedStory.chapterPlan)
+      ? generatedStory.chapterPlan
+      : [];
 
-const story =
-generatedStory.storyPreview;
+    // Older frontend pages expect suggestedCharacters from /generate-story.
+    // The story engine intentionally focuses on the story route, so generate
+    // the cast as a separate, smaller request and keep the response contract.
+    let suggestedCharacters = Array.isArray(generatedStory.suggestedCharacters)
+      ? generatedStory.suggestedCharacters
+      : [];
+    let characterGenerationWarning = null;
 
-const suggestedCharacters =
-generatedStory.suggestedCharacters || [];
-
-const chapterPlan =
-generatedStory.chapterPlan || [];
-   let storyId =
-null;
-
-try{
-
-const savedStory =
-await saveStory({
-
-title,
-genre,
-mood,
-theme,
-worldSetting,
-romanceType,
-conflictType,
-storyLength,
-characterCount,
-endingCount,
-idea,
-story,
-chapterPlan,
-suggestedCharacters
-
-});
-
-storyId =
-savedStory.id;
-
-}
-
-catch(saveError){
-
-console.error(
-"Story Save Error:"
-);
-
-console.error(
-saveError
-);
-
-}
-
-res.json({
-
-success:true,
-
-story,
-
-suggestedCharacters,
-
-chapterPlan,
-
-storyId
-
-});
-
-    } catch (error) {
-
-        console.error("Story Generation Error:");
-        console.error(error);
-
-        res.status(500).json({
-            success: false,
-            error: error.message
+    if (suggestedCharacters.length === 0) {
+      try {
+        const characterResult = await generateStoryCharacters({
+          story: {
+            title, genre, mood, theme, worldSetting, romanceType,
+            conflictType, storyLength, characterCount,
+            description: idea, idea, story
+          },
+          characterCount,
+          existingCharacters: []
         });
-
+        suggestedCharacters = Array.isArray(characterResult.characters)
+          ? characterResult.characters
+          : [];
+        if (suggestedCharacters.length === 0) {
+          characterGenerationWarning = characterResult.message ||
+            "The story was created, but no characters were generated. Use Generate Characters to try again.";
+        }
+      } catch (characterError) {
+        console.error("Initial story cast generation failed:", characterError.message || characterError);
+        characterGenerationWarning =
+          "The story was created, but the cast could not be generated. Please use Generate Characters to retry.";
+      }
     }
 
+    let storyId = null;
+    try {
+      const savedStory = await saveStory({
+        title, genre, mood, theme, worldSetting, romanceType,
+        conflictType, storyLength, characterCount, endingCount, idea,
+        story, chapterPlan, suggestedCharacters
+      });
+      storyId = savedStory && savedStory.id ? savedStory.id : null;
+    } catch (saveError) {
+      console.error("Story Save Error:", saveError.message || saveError);
+    }
+
+    res.json({
+      success: true,
+      story,
+      // Keep both names for old and newer frontend clients.
+      suggestedCharacters,
+      characters: suggestedCharacters,
+      chapterPlan,
+      storyId,
+      characterGenerationWarning
+    });
+  } catch (error) {
+    console.error("Story Generation Error:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Unable to generate story."
+    });
+  }
 });
+
 app.post("/generate-character", async (req,res)=>{
 
     try{

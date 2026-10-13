@@ -1,5 +1,5 @@
-const { callGemini } =
-require("./geminiClient");
+const { callGemini } = require("./geminiClient");
+const { TANGLISH_STYLE } = require("./languageStyle");
 
 const NAME_BANK = [
 "Aarav","Aadhya","Arjun","Ananya","Riya","Rohan","Meera","Kabir","Tara","Dev",
@@ -384,6 +384,8 @@ character.occupation
 
 const prompt = `
 
+${TANGLISH_STYLE}
+
 You are StoryVerse AI.
 
 Generate only the missing character cast for an interactive story.
@@ -465,7 +467,9 @@ RULES
 - Never create more than 12 total story characters.
 - Do not repeat any existing character name.
 - Do not repeat a name inside the generated list.
-- Study the story idea for requested roles and counts.
+- Study the story idea, story preview, genre, setting, and relationship pressure before assigning every role.
+- Every character must clearly belong to THIS specific story; do not create generic or unrelated cast members.
+- Preserve named people, relationships, occupations, family roles, and role counts explicitly requested by the user.
 - If the idea says "1 love interest", create only one Love Interest in total.
 - If the idea says "main character mom 1", include one Main Character's Mother in total.
 - If the idea asks for two siblings, six friends, one villain, or similar counts, honour them.
@@ -473,79 +477,74 @@ RULES
 - Include one Main Character if the existing cast does not have one.
 - Include a Love Interest when romance is relevant and one does not already exist.
 - Every character must have a useful and distinct story function.
-- Character profiles must be concise: 6 to 8 sentences.
+- Character profiles must be concise: 6 to 8 complete sentences, grounded in the story preview and original idea.
+- Write profile and other user-facing character descriptions in natural Tanglish using Roman letters; do not use Tamil script.
+- Give each character a distinct motivation, relationship to the central conflict, and believable reason to appear in the story.
 - Names must suit the story's culture, genre, and setting.
 
 Return valid JSON only.
 
 `;
 
-const aiText =
-await callGemini(
-prompt,
-{
-temperature:0.75,
-responseMimeType:"application/json",
-maxOutputTokens:3500
-}
-);
+let parsed = null;
+let aiText = "";
+let lastParseError = null;
 
-let parsed;
+for (let attempt = 0; attempt < 2; attempt++) {
+  const retryInstruction = attempt === 0
+    ? ""
+    : `\n\nSTRICT RETRY: Your previous output was invalid JSON or contained fewer than ${generationCount} characters. Return exactly ${generationCount} complete character objects in the required schema. Do not shorten the JSON, omit fields, add prose, or use markdown.`;
 
-try{
+  aiText = await callGemini(
+    prompt + retryInstruction,
+    {
+      temperature: attempt === 0 ? 0.75 : 0.55,
+      responseMimeType: "application/json",
+      maxOutputTokens: Math.max(4500, Math.min(7000, generationCount * 560))
+    }
+  );
 
-parsed =
-JSON.parse(
-cleanJsonText(aiText)
-);
+  try {
+    const candidate = JSON.parse(cleanJsonText(aiText));
+    const candidateCharacters = Array.isArray(candidate)
+      ? candidate
+      : (Array.isArray(candidate.characters) ? candidate.characters : []);
 
-}
-catch(error){
-
-console.error(
-"Character suggestion JSON parse error:"
-);
-
-console.error(error);
-
-console.error(
-"Raw character suggestion response:"
-);
-
-console.error(aiText);
-
-throw new Error(
-"AI returned an incomplete character response. Please try Generate Characters again."
-);
-
+    parsed = candidate;
+    if (candidateCharacters.length >= generationCount || attempt === 1) break;
+  } catch (error) {
+    lastParseError = error;
+    console.error(`Character suggestion JSON parse attempt ${attempt + 1} failed:`, error.message);
+  }
 }
 
-const rawCharacters =
-Array.isArray(parsed)
-?
-parsed
-:
-(
-Array.isArray(parsed.characters)
-?
-parsed.characters
-:
-[]
+if (!parsed) {
+  console.error("Raw character suggestion response:", aiText);
+  throw new Error(
+    "AI returned an incomplete character response. Please try Generate Characters again."
+  );
+}
+
+const rawCharacters = Array.isArray(parsed)
+  ? parsed
+  : (Array.isArray(parsed.characters) ? parsed.characters : []);
+
+const characters = normalizeCharacters(
+  rawCharacters,
+  existingCharacters,
+  generationCount
 );
 
-const characters =
-normalizeCharacters(
-rawCharacters,
-existingCharacters,
-generationCount
-);
+if (characters.length === 0) {
+  throw new Error(
+    "No characters were generated. Please try again."
+  );
+}
 
-if(characters.length === 0){
-
-throw new Error(
-"No characters were generated. Please try again."
-);
-
+if (characters.length < generationCount) {
+  console.warn(
+    `Character generation returned ${characters.length} of ${generationCount} requested characters.`
+  );
 }
 
 return {

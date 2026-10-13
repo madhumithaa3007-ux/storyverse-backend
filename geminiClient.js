@@ -6,7 +6,7 @@ async function callGemini(prompt, options = {}) {
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY environment variable. Add it to your backend hosting environment.");
   const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const client = new GoogleGenerativeAI(apiKey);
-  const generationConfig = {};
+  const generationConfig = { temperature: 0.8 };
   if (Number.isFinite(options.temperature)) generationConfig.temperature = options.temperature;
   if (Number.isFinite(options.maxOutputTokens)) generationConfig.maxOutputTokens = options.maxOutputTokens;
   if (options.responseMimeType) generationConfig.responseMimeType = options.responseMimeType;

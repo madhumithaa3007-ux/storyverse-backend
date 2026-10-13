@@ -242,10 +242,10 @@ mode:
 "very_short",
 
 instruction:
-"Reply in 1 short, natural sentence. Usually 4 to 18 words. Do not add an unnecessary explanation.",
+"Reply in one complete, natural sentence, usually 5 to 18 words. Even for a greeting, use a real phrase rather than a single word or emoji.",
 
 maxOutputTokens:
-70
+110
 
 };
 
@@ -265,10 +265,10 @@ mode:
 "short",
 
 instruction:
-"Reply in 1 or 2 natural sentences. Usually 10 to 40 words. Be direct and realistic.",
+"Reply in 1 or 2 complete natural sentences, usually 12 to 45 words. Be direct and realistic.",
 
 maxOutputTokens:
-110
+150
 
 };
 
@@ -286,10 +286,10 @@ mode:
 "normal",
 
 instruction:
-"Reply in 2 to 4 natural sentences. Usually 25 to 85 words. Use only the detail needed for this moment.",
+"Reply in 2 to 4 complete natural sentences, usually 25 to 85 words. Use only the detail needed for this moment.",
 
 maxOutputTokens:
-210
+250
 
 };
 
@@ -302,10 +302,10 @@ mode:
 "detailed",
 
 instruction:
-"Reply in 3 to 6 natural sentences. Usually 60 to 150 words. Address the important points without padding or repeating the user.",
+"Reply in 3 to 6 complete natural sentences, usually 60 to 150 words. Address the important points without padding or repeating the user.",
 
 maxOutputTokens:
-340
+400
 
 };
 
@@ -458,6 +458,20 @@ return (
 PROMPT BUILDER
 ==================================================
 */
+
+function countMeaningfulWords(value) {
+  const withoutActions = String(value || "").replace(/\*[^*]*\*/g, " ");
+  const matches = withoutActions.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu);
+  return matches ? matches.length : 0;
+}
+
+function explicitlyRequestsOneWord(message) {
+  return /\b(one word|single word|answer only yes or no|just yes or no)\b/i.test(String(message || ""));
+}
+
+function isInsufficientReply(reply, message) {
+  return !explicitlyRequestsOneWord(message) && countMeaningfulWords(reply) < 3;
+}
 
 function buildPrompt({
 
@@ -842,7 +856,9 @@ REPLY LENGTH RULES
 
 - Match the length and emotional weight of the user's message.
 - A greeting, acknowledgement, teasing line or simple question should receive a short reply.
-- A short input does not automatically need a paragraph.
+- A short input does not automatically need a paragraph, but it still needs a complete conversational response.
+- Never reply with only one word or only an emoji unless the user explicitly asks for a one-word answer or sends only an emoji as their message.
+- For greetings, answer with a complete friendly phrase or sentence.
 - Use a longer reply only when the user asks for an explanation, sends a confession, raises several points, or the emotional moment genuinely needs detail.
 - Never pad a reply just to make it longer.
 - Never cut an important emotional answer short merely to make it brief.
@@ -870,7 +886,7 @@ ROLEPLAY RULES
 
 - Emojis are an important part of your personality.
 
-- Use emojis in roughly 60-80% of replies.
+- Use relevant emojis naturally in roughly 60-80% of casual replies; skip them when the scene is serious or an emoji would feel unnatural.
 
 - Happy moments:
 😊😄🥰✨❤️
@@ -900,7 +916,7 @@ ROLEPLAY RULES
 
 - Sometimes end a sentence with an emoji.
 
-- Sometimes send only an emoji.
+- Never send an emoji by itself as the complete reply unless the user explicitly sends only an emoji and a reaction-only answer fits the moment.
 
 - Sometimes repeat emojis:
 😂😂
@@ -919,19 +935,7 @@ LATEST USER MESSAGE
 
 TEXTING STYLE
 
-Sometimes reply with
-
-"😂"
-
-or
-
-"❤️"
-
-or
-
-"🥺"
-
-only.
+Do not answer with a single emoji or one word by default. Use a complete, natural phrase and add an emoji when it fits.
 
 Sometimes say
 
@@ -1155,16 +1159,27 @@ replyProfile.maxOutputTokens
 }
 );
 
-const reply =
+let reply =
 cleanText(
 aiText,
 1800
 );
 
+if(reply && isInsufficientReply(reply, message)){
+  const correctedText = await callGemini(
+    prompt + `\n\nRESPONSE QUALITY CHECK: Your previous draft was too short. Return a complete, natural character reply with at least 5 meaningful words (usually 5–18 words for a greeting). Do not send only an emoji or a single word. Keep the character's Tanglish voice and add a relevant emoji naturally when appropriate.`,
+    { temperature: 0.72, maxOutputTokens: 150 }
+  );
+  const correctedReply = cleanText(correctedText, 1800);
+  if(correctedReply && !isInsufficientReply(correctedReply, message)){
+    reply = correctedReply;
+  } else {
+    reply = buildFallbackReply({ message, scene: chatScene, relationship, profile: replyProfile });
+  }
+}
+
 if(reply){
-
-return reply;
-
+  return reply;
 }
 
 throw new Error(
