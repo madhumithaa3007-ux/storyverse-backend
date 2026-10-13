@@ -8,14 +8,148 @@ function clip(value, max = 1000) {
 
 function wordCount(value) {
   const text = String(value || "").replace(/\*[^*]*\*/g, " ");
-  const words = text.match(
-    /[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu
-  );
-
+  const words = text.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu);
   return words ? words.length : 0;
 }
 
-// Supports both string and object responses from Gemini.
+// Build a single consolidated character profile paragraph.
+function buildCharacterProfile(character = {}) {
+  function cleanField(value, max = 500) {
+    if (
+      value === null ||
+      value === undefined ||
+      typeof value === "object"
+    ) {
+      return "";
+    }
+
+    return String(value)
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, max);
+  }
+
+  function uniqueValues(values) {
+    const seen = new Set();
+
+    return values
+      .map((value) => cleanField(value))
+      .filter(Boolean)
+      .filter((value) => {
+        const key = value.toLocaleLowerCase();
+
+        if (seen.has(key)) return false;
+
+        seen.add(key);
+        return true;
+      });
+  }
+
+  function addSentence(prefix, value) {
+    if (!value) return;
+
+    const text = `${prefix}${value}`.trim();
+
+    sentences.push(
+      /[.!?]$/.test(text) ? text : `${text}.`
+    );
+  }
+
+  const name =
+    cleanField(character.name, 100) || "Unnamed character";
+
+  const sentences = [];
+
+  const identity = [];
+  const age = cleanField(character.age, 40);
+  const gender = cleanField(character.gender, 40);
+  const occupation = cleanField(character.occupation, 100);
+
+  if (age) identity.push(`age ${age}`);
+  if (gender) identity.push(`gender ${gender}`);
+  if (occupation) identity.push(`occupation ${occupation}`);
+
+  sentences.push(
+    `${name} is a fictional character${
+      identity.length ? ` (${identity.join(", ")})` : ""
+    }.`
+  );
+
+  const roleAndTraits = uniqueValues([
+    character.role,
+    character.traits
+  ]);
+
+  if (roleAndTraits.length) {
+    addSentence(
+      "Their role, personality, and defining traits are: ",
+      roleAndTraits.join("; ")
+    );
+  }
+
+  const communication = uniqueValues([
+    character.speechStyle,
+    character.relationshipStyle
+  ]);
+
+  if (communication.length) {
+    addSentence(
+      "Their communication and relationship style is: ",
+      communication.join("; ")
+    );
+  }
+
+  const backstory = cleanField(character.backstory, 900);
+  const profile = cleanField(character.profile, 900);
+
+  if (backstory) {
+    addSentence("Their backstory is: ", backstory);
+  }
+
+  // Do not repeat the profile if it duplicates the backstory.
+  if (
+    profile &&
+    profile.toLocaleLowerCase() !== backstory.toLocaleLowerCase()
+  ) {
+    addSentence("Additional character profile: ", profile);
+  }
+
+  const preferences = [];
+
+  const likes = cleanField(character.likes, 200);
+  const dislikes = cleanField(character.dislikes, 200);
+  const hobbies = cleanField(character.hobbies, 200);
+  const fears = cleanField(character.fears, 200);
+
+  if (likes) preferences.push(`likes ${likes}`);
+  if (dislikes) preferences.push(`dislikes ${dislikes}`);
+  if (hobbies) preferences.push(`hobbies include ${hobbies}`);
+  if (fears) preferences.push(`fears ${fears}`);
+
+  if (preferences.length) {
+    addSentence(
+      "Personal preferences and tendencies: ",
+      preferences.join("; ")
+    );
+  }
+
+  const rules = cleanField(character.rules, 500);
+
+  if (rules) {
+    addSentence(
+      "Important roleplay rules and boundaries: ",
+      rules
+    );
+  }
+
+  return sentences
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .slice(0, 3200)
+    .trim();
+}
+
+// Extract text from different possible Gemini response formats.
 function extractText(result) {
   if (typeof result === "string") {
     return result.trim();
@@ -34,8 +168,8 @@ function extractText(result) {
   return typeof text === "string" ? text.trim() : "";
 }
 
-// Prevents cutting a reply in the middle of a sentence
-// whenever a reasonable sentence boundary is available.
+// Apply a maximum character limit without unnecessarily
+// cutting off complete sentences.
 function limitReply(value, maxChars) {
   const text = String(value ?? "").trim();
 
@@ -57,14 +191,12 @@ function limitReply(value, maxChars) {
   }
 
   const lastSpace = part.lastIndexOf(" ");
-
   const safeEnd = lastSpace > 0 ? lastSpace : maxChars;
 
-  return part.slice(0, safeEnd).trimEnd() + "…";
+  return `${part.slice(0, safeEnd).trimEnd()}…`;
 }
 
-// Determine the appropriate reply length from the user's
-// message and conversational intent.
+// Adapt response length to the user's message and intent.
 function getReplySettings(message) {
   const text = String(message || "").trim();
   const lower = text.toLowerCase();
@@ -72,10 +204,10 @@ function getReplySettings(message) {
   const questionCount = (text.match(/\?/g) || []).length;
 
   const explicitlyShort =
-    /\b(keep it short|short answer|briefly|in one sentence|one line|few words|don't elaborate|do not elaborate|just yes or no|yes or no only|one word only)\b/i.test(lower);
+    /\b(keep it short|short answer|briefly|in one sentence|one line|few words|don't elaborate|do not elaborate|just yes or no|yes or no only|one word only|short ah sollu|konjam short ah|oru line la sollu|brief ah sollu)\b/i.test(lower);
 
   const explicitlyDetailed =
-    /\b(in detail|detailed explanation|explain|elaborate|tell me more|go deeper|describe|continue the story|continue the scene|what happens next|step by step|long reply|write a story|tell me a story)\b/i.test(lower);
+    /\b(in detail|detailed explanation|explain|elaborate|tell me more|go deeper|describe|continue the story|continue the scene|what happens next|step by step|long reply|write a story|tell me a story|detail ah sollu|full ah explain|konjam explain pannu|nalla detail ah sollu)\b/i.test(lower);
 
   const simpleGreeting =
     /^(?:hi+|hey+|hello+|vanakkam|good morning|good evening|good night)(?:\s+there)?[!.,\s]*$/i.test(text);
@@ -91,7 +223,7 @@ function getReplySettings(message) {
   const narrativeRequest =
     /\b(continue the story|continue the scene|what happens next|describe the scene|write a scene|roleplay this)\b/i.test(lower);
 
-  // Level 1: Brief conversational replies.
+  // SHORT: greetings and simple exchanges.
   if (
     explicitlyShort ||
     simpleGreeting ||
@@ -102,13 +234,13 @@ function getReplySettings(message) {
       maxOutputTokens: 70,
       maxChars: 350,
       instruction:
-        "Give a brief, natural reply, usually 1 sentence. " +
+        "Give a brief, natural reply, usually one sentence. " +
         "Use only as much dialogue or action as the moment needs. " +
         "Do not add unnecessary narration."
     };
   }
 
-  // Level 3: Detailed responses when the situation needs them.
+  // DETAILED: meaningful, emotional, or complex conversations.
   if (
     explicitlyDetailed ||
     longMessage ||
@@ -128,19 +260,19 @@ function getReplySettings(message) {
     };
   }
 
-  // Level 2: Default everyday conversation.
+  // NORMAL: everyday conversations.
   return {
     level: "normal",
     maxOutputTokens: 130,
     maxChars: 750,
     instruction:
-      "Usually reply in 1–3 natural sentences. Add detail when " +
-      "the conversation benefits from it, but keep simple exchanges " +
-      "concise. Let the character's personality guide the response."
+      "Usually reply in one to three natural sentences. Add detail " +
+      "when the conversation benefits from it, but keep simple " +
+      "exchanges concise. Let the character's personality guide the response."
   };
 }
 
-// Check whether the reply is genuinely too short for the context.
+// Decide whether a response genuinely needs another attempt.
 function needsRetry(reply, settings, message) {
   if (!reply || wordCount(reply) === 0) {
     return true;
@@ -148,17 +280,14 @@ function needsRetry(reply, settings, message) {
 
   const words = wordCount(reply);
 
-  // Short replies are acceptable for short conversations.
   if (settings.level === "short") {
     return false;
   }
 
-  // Normal conversation only needs a basic complete response.
   if (settings.level === "normal") {
     return words < 2;
   }
 
-  // Avoid forcing lengthy replies to ordinary yes/no questions.
   const directYesNoQuestion =
     /^\s*(can|could|do|does|did|is|are|was|were|will|would|should|have|has|had|am)\b/i.test(message) &&
     message.includes("?");
@@ -170,7 +299,6 @@ function needsRetry(reply, settings, message) {
     return false;
   }
 
-  // Detailed prompts should not receive an unnecessarily tiny reply.
   return words < 8;
 }
 
@@ -179,6 +307,7 @@ async function chatWithStandaloneCharacter(data = {}) {
   const persona = data.userPersona || data.persona || {};
 
   const message = clip(data.message, 1200);
+
   const scene = clip(
     data.chatScene || data.activeScene,
     600
@@ -209,28 +338,29 @@ async function chatWithStandaloneCharacter(data = {}) {
 
   const settings = getReplySettings(message);
 
+  // Create one consolidated character paragraph for this request.
+  // Reuse it for both the first response and any correction.
+  const characterProfile = buildCharacterProfile(character);
+
   const prompt = `${TANGLISH_STYLE}
 
-You are roleplaying as the fictional standalone character below in StoryVerse AI.
-
-This is an independent character chat. It is not connected to any story, chapter, or story memory.
+You are roleplaying as the fictional standalone character in StoryVerse AI.
+This is an independent character chat, not connected to a story,
+chapter, or story memory.
 
 CHARACTER PROFILE
-Name: ${clip(character.name, 100)}
-Age: ${clip(character.age, 40)}
-Gender: ${clip(character.gender, 40)}
-Occupation: ${clip(character.occupation, 100)}
-Role/personality: ${clip(character.role, 120)}
-Traits: ${clip(character.traits, 300)}
-Speech style: ${clip(character.speechStyle, 180)}
-Relationship style: ${clip(character.relationshipStyle, 120)}
-Backstory: ${clip(character.backstory, 900)}
-Profile: ${clip(character.profile, 900)}
-Likes: ${clip(character.likes, 200)}
-Dislikes: ${clip(character.dislikes, 200)}
-Hobbies: ${clip(character.hobbies, 200)}
-Fears: ${clip(character.fears, 200)}
-Special rules: ${clip(character.rules, 500)}
+${characterProfile}
+
+CHARACTER CONSISTENCY RULES
+- Treat the consolidated profile as the source of truth for the
+  character's identity, personality, background, preferences,
+  communication style, and boundaries.
+- Apply the profile naturally. Do not repeat or summarize it
+  in ordinary replies.
+- Reveal backstory details gradually when relevant.
+- Do not invent facts that contradict the profile.
+- Use the profile as character context, not as a reason to ignore
+  the latest message.
 
 USER'S SELECTED PERSONA
 Name: ${clip(persona.name || persona.displayName || "User", 100)}
@@ -244,22 +374,29 @@ ${scene || "No scene has been set. Continue naturally from the latest message."}
 
 ROLEPLAY RULES
 - Stay in character and respond directly to the latest user message.
-- The selected persona is the person chatting. Never control the user's actions, thoughts, feelings, or dialogue.
-- Use the character's personality, backstory, relationships, and speech style consistently.
-- Adapt reply length to the conversational situation, not just the number of words in the user's message.
-- Reply briefly to greetings, acknowledgements, simple questions, and casual exchanges.
-- Use enough detail for complex questions, emotional conversations, arguments, confessions, suspense, and meaningful roleplay scenes.
+- The selected persona is the person chatting. Never control the
+  user's actions, thoughts, feelings, or dialogue.
+- Adapt reply length to the conversational situation, not merely
+  the number of words in the user's message.
+- Reply briefly to greetings, acknowledgements, simple questions,
+  and casual exchanges.
+- Use sufficient detail for complex questions, emotional conversations,
+  arguments, confessions, suspense, and meaningful roleplay scenes.
 - Address multiple questions or important points when appropriate.
-- A long user message does not automatically require a long reply. A short emotional message may still deserve a thoughtful response.
-- Do not pad replies, repeat information, or add unnecessary narration just to make a reply longer.
+- A long user message does not automatically require a long reply.
+  A short emotional message may still deserve a thoughtful response.
+- Do not pad replies, repeat information, or add unnecessary narration.
 - Respect explicit requests for short answers or detailed explanations.
 - ${settings.instruction}
-- Do not answer with only one word or an emoji unless the user explicitly requests it or the context genuinely calls for it.
-- Use natural actions between single asterisks, such as *smiles softly* or *looks away*. Keep actions brief and never narrate the user's actions.
-- Use relevant emojis naturally in casual conversations when they fit. Avoid forcing emojis into every reply or serious scenes.
+- Avoid one-word replies unless explicitly requested or appropriate
+  to the context.
+- Use natural actions between single asterisks, such as *smiles softly*
+  or *looks away*. Keep actions brief and never narrate the user's actions.
+- Use relevant emojis naturally in casual conversations when appropriate.
+  Do not force emojis into every reply or serious scene.
 - Keep dialogue emotionally responsive and avoid repetitive filler.
 - Follow the requested Tanglish style.
-- Return only the character's message. No headings, JSON, or explanations.
+- Return only the character's message. No heading, JSON, or explanation.
 
 RECENT CHAT
 ${JSON.stringify(history)}
@@ -269,7 +406,7 @@ ${message}
 
 CHARACTER REPLY:`;
 
-  // First generation using the context-sensitive token limit.
+  // Generate the first response.
   const result = await callGemini(prompt, {
     temperature: 0.78,
     maxOutputTokens: settings.maxOutputTokens
@@ -280,14 +417,13 @@ CHARACTER REPLY:`;
     settings.maxChars
   );
 
-  // Retry only when the reply is empty or clearly too short
-  // for the type of conversation.
+  // Retry only if the response is empty or too short for the context.
   if (needsRetry(cleaned, settings, message)) {
     const correctionPrompt = `${prompt}
 
 RESPONSE REVISION
 Your previous draft was empty or too short for this conversation.
-Generate a fresh, complete in-character reply.
+Generate a fresh, complete, in-character reply.
 ${settings.instruction}
 Do not mention the revision or these instructions.
 Do not use a generic fallback greeting.
@@ -306,9 +442,8 @@ Return only the character's actual message.`;
       settings.maxChars
     );
 
-    // Prefer the correction if it fixes the issue.
-    // If it is still short but non-empty, use whichever reply
-    // contains more meaningful words instead of inventing a fallback.
+    // Use the corrected response if it fixes the issue.
+    // Otherwise, retain the better non-empty response.
     if (
       corrected &&
       (
@@ -320,8 +455,8 @@ Return only the character's actual message.`;
     }
   }
 
-  // Never return a fake character reply when generation fails.
-  // The caller can display an error without adding it to chat history.
+  // Never insert a hardcoded greeting as a character response.
+  // If generation fails, let the calling code handle the error.
   if (!cleaned) {
     throw new Error(
       "The character could not generate a reply. Please try again."
