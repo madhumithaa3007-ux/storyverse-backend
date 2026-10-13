@@ -9,6 +9,7 @@ generateStoryCharacters
 "./characterSuggestionEngine"
 );
 const { chatWithCharacter } = require("./chatEngine");
+const { chatWithStandaloneCharacter } = require("./standaloneChatEngine");
 const { playChapter } = require("./chapterEngine");
 const {
 saveStory
@@ -316,6 +317,16 @@ catch(error){
 
 });
 
+
+app.post("/chat-standalone-character", async (req, res) => {
+  try {
+    const reply = await chatWithStandaloneCharacter(req.body || {});
+    res.json({ success: true, reply });
+  } catch (error) {
+    console.error("Standalone Character Chat Error:", error);
+    res.status(500).json({ success: false, error: error.message || "Unable to chat with this character." });
+  }
+});
 
 const PORT =
 process.env.PORT || 3000;

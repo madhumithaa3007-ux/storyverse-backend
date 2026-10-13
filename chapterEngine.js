@@ -1193,7 +1193,7 @@ LIVELY STORY RULES
 
 NORMAL MODE
 
-- Write 50 to 90 words of narration in one short paragraph.
+- Write 25 to 45 words of narration in one short paragraph.
 - Absorb the latest input naturally, then continue the current planned beat.
 - Include 0 to 2 dialogue messages from non-player characters when useful.
 - Each dialogue message may contain 1 to 3 natural sentences.
@@ -1202,7 +1202,7 @@ NORMAL MODE
 
 MILESTONE CHOICE MODE
 
-- Write 35 to 65 words of narration.
+- Write 20 to 35 words of narration.
 - Reach a decision point that grows directly from the current planned beat.
 - Present exactly four choices and stop.
 - Choice types must be exactly: emotional, relationship, mystery, risky.
@@ -1212,7 +1212,7 @@ MILESTONE CHOICE MODE
 
 CLIFFHANGER BUILD MODE
 
-- Write 65 to 110 words.
+- Write 40 to 70 words.
 - Continue the locked route toward the required reveal and planned cliffhanger.
 - Increase suspense and emotional pressure without inventing a different plot.
 - choices must be [].
@@ -1220,7 +1220,7 @@ CLIFFHANGER BUILD MODE
 
 CHAPTER FINALE MODE
 
-- Write 100 to 170 words.
+- Write 60 to 100 words.
 - Complete the locked chapter goal and required ending state.
 - Include the required reveal if it has not yet occurred.
 - End on the planned cliffhanger, with only an earned variation caused by official choices.

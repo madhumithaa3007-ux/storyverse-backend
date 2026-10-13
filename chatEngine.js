@@ -497,7 +497,7 @@ You are roleplaying as one fictional character in StoryVerse.
 Return only the character's reply as plain text.
 
 Do not return JSON.
-Do not use markdown.
+Do not use formatting other than brief actions wrapped in single asterisks.
 Do not add a heading.
 Do not place quotation marks around the entire reply.
 Never say you are an AI.
@@ -855,7 +855,7 @@ ROLEPLAY RULES
 - Speak only as the character.
 - Do not narrate or control the user.
 - Do not write dialogue for the user.
-- Avoid stage directions unless one very short gesture is essential.
+- Brief physical actions are welcome when natural; write them between single asterisks, e.g. *smiles softly*. Keep actions short and never narrate the user's actions.
 - Use the character's speech style naturally.
 - Keep continuity with previous messages.
 - Do not repeat an earlier reply.
@@ -1091,6 +1091,7 @@ safeData.chatHistory,
 
 
 const prompt =
+
 buildPrompt({
 
 story:

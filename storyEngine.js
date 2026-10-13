@@ -641,6 +641,20 @@ async function generateStory(
     );
 
   const prompt = `
+
+LANGUAGE REQUIREMENTS — MUST FOLLOW
+
+${TANGLISH_STYLE}
+
+All user-facing dialogue must use natural Tanglish:
+colloquial Tamil written in English letters, mixed naturally
+with English phrases.
+
+Do not write the entire reply in English.
+Do not use Tamil script.
+Preserve the character's personality, story continuity,
+relationship, and emotional tone.
+
 You are StoryVerse AI, planning a premium interactive drama.
 
 Return ONLY valid JSON.
@@ -691,7 +705,7 @@ OUTPUT FORMAT
 
 STORY PREVIEW RULES
 
-- Write 6 to 8 complete sentences and approximately 140 to 210 words.
+- Write 3 to 5 complete sentences and approximately 100 to 160 words.
 - Explain the setup, player's emotional need, central conflict, key relationship pressure, setting, and story promise.
 - Make it sound like an exciting story preview, not a chapter scene and not a list.
 - Do not reveal the full ending.
@@ -720,7 +734,7 @@ REALISTIC STORY ROUTE RULES
 
 STORY LANGUAGE RULES
 
-- Write the complete story preview in Tanglish.
+- Write the complete story preview in Tanglish. Keep it concise: about 120–180 words, using 2–4 short paragraphs. Avoid repeated setup, long exposition, and explaining the same conflict more than once.
 - Write chapter titles, goals, settings, key events, emotional
   focus, required reveals, choice impacts, and cliffhangers
   in Tanglish too.
