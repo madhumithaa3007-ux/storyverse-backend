@@ -12,6 +12,34 @@ function wordCount(value) {
   return words ? words.length : 0;
 }
 
+// Retry transient Gemini overload/rate-limit/server errors before failing the chat.
+// This does not change the prompt, character profile, or response format.
+function isTransientGeminiError(error) {
+  const status = Number(error?.status || error?.statusCode || error?.response?.status);
+  const message = String(error?.message || error || "");
+  return [429, 500, 502, 503, 504].includes(status) ||
+    /\b(429|500|502|503|504)\b|service unavailable|high demand|temporarily unavailable|overloaded|rate.?limit|fetch failed|network error/i.test(message);
+}
+
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function callGeminiWithRetry(prompt, options) {
+  const delays = [700, 1600];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await callGemini(prompt, options);
+    } catch (error) {
+      if (!isTransientGeminiError(error) || attempt >= delays.length) {
+        throw error;
+      }
+      console.warn(
+        `Gemini temporarily unavailable; retrying standalone chat (${attempt + 1}/${delays.length})...`
+      );
+      await wait(delays[attempt]);
+    }
+  }
+}
+
 // Build a single consolidated character profile paragraph.
 function buildCharacterProfile(character = {}) {
   function cleanField(value, max = 500) {
@@ -407,7 +435,7 @@ ${message}
 CHARACTER REPLY:`;
 
   // Generate the first response.
-  const result = await callGemini(prompt, {
+  const result = await callGeminiWithRetry(prompt, {
     temperature: 0.78,
     maxOutputTokens: settings.maxOutputTokens
   });
@@ -429,7 +457,7 @@ Do not mention the revision or these instructions.
 Do not use a generic fallback greeting.
 Return only the character's actual message.`;
 
-    const correctionResult = await callGemini(
+    const correctionResult = await callGeminiWithRetry(
       correctionPrompt,
       {
         temperature: 0.7,
